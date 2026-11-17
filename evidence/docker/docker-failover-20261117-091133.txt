@@ -1,0 +1,18 @@
+Fecha local: 2026-11-17T09:11:33.6919036-05:00
+Motor: Docker Desktop
+Stack: gart-gallery
+
+=== Contenedores ===
+NAME                              IMAGE                         COMMAND                  SERVICE            CREATED         STATUS                   PORTS
+gart-gallery-frontend-backup-1    gart-gallery-frontend:local   "/docker-entrypoint.…"   frontend-backup    4 minutes ago   Up 4 minutes (healthy)   127.0.0.1:8081->8080/tcp
+gart-gallery-frontend-primary-1   gart-gallery-frontend:local   "/docker-entrypoint.…"   frontend-primary   4 minutes ago   Up 7 seconds (healthy)   8080/tcp
+gart-gallery-frontend-proxy-1     nginx:1.27-alpine             "/docker-entrypoint.…"   frontend-proxy     4 minutes ago   Up 4 minutes (healthy)   127.0.0.1:8080->8080/tcp
+gart-gallery-postgres-1           postgres:16-alpine            "docker-entrypoint.s…"   postgres           4 minutes ago   Up 4 minutes (healthy)   5432/tcp
+gart-gallery-works-service-1      gart-gallery-works:local      "uvicorn app:app --h…"   works-service      4 minutes ago   Up 4 minutes (healthy)   127.0.0.1:3002->3002/tcp
+
+Frontend principal: HTTP 200 en http://127.0.0.1:8080/
+Copia directa: HTTP 200 en http://127.0.0.1:8081/
+Failover comprobado: principal detenido temporalmente; URL principal respondió HTTP 200 desde la copia.
+Recuperación del principal: healthy; URL principal respondió HTTP 200.
+Works: HTTP 200 en /health; 4 obras en /api/works.
+Secreto local: almacenado en .env.docker; valor omitido de esta evidencia.

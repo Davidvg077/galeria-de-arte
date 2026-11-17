@@ -1,0 +1,243 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: works-postgres
+  namespace: gart-gallery
+  labels:
+    app.kubernetes.io/name: works-postgres
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: works-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: works-postgres
+  namespace: gart-gallery
+  labels:
+    app.kubernetes.io/name: works-postgres
+spec:
+  serviceName: works-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: works-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: works-postgres
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: works-postgres-env
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: works-postgres-env
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: works-postgres-env
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          startupProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - works
+                - -d
+                - gart_gallery
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - works
+                - -d
+                - gart_gallery
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - works
+                - -d
+                - gart_gallery
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: works-service
+  namespace: gart-gallery
+  labels:
+    app.kubernetes.io/name: works-service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: works-service
+  ports:
+    - name: http
+      port: 3002
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: works-service
+  namespace: gart-gallery
+  labels:
+    app.kubernetes.io/name: works-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: works-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: works-service
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: wait-for-postgres
+          image: gart-gallery-works:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -c
+            - |
+              import socket
+              import time
+
+              deadline = time.monotonic() + 120
+              while time.monotonic() < deadline:
+                  try:
+                      with socket.create_connection(("works-postgres", 5432), timeout=2):
+                          break
+                  except OSError:
+                      time.sleep(2)
+              else:
+                  raise SystemExit("PostgreSQL did not become available")
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: works
+          image: gart-gallery-works:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: works-postgres-env
+                  key: DATABASE_URL
+          ports:
+            - name: http
+              containerPort: 3002
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

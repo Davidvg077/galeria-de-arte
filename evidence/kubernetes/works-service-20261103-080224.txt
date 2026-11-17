@@ -1,0 +1,36 @@
+Fecha local: 2026-11-03T08:02:24.8011934-05:00
+Contexto Kubernetes: minikube
+
+=== Nodos ===
+NAME       STATUS   ROLES           AGE   VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                         KERNEL-VERSION                              CONTAINER-RUNTIME
+minikube   Ready    control-plane   48m   v1.37.0   192.168.49.2   <none>        Debian GNU/Linux 12 (bookworm)   6.18.33.2-microsoft-standard-WSL2 (amd64)   containerd://2.3.4
+
+=== Deployment, PostgreSQL, pods, servicios y volumenes ===
+NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE    CONTAINERS   IMAGES                        SELECTOR
+deployment.apps/gart-gallery-frontend   2/2     2            2           48m    frontend     gart-gallery-frontend:local   app.kubernetes.io/name=gart-gallery-frontend
+deployment.apps/works-service           1/1     1            1           3m4s   works        gart-gallery-works:local      app.kubernetes.io/name=works-service
+
+NAME                              READY   AGE    CONTAINERS   IMAGES
+statefulset.apps/works-postgres   1/1     3m4s   postgres     postgres:16-alpine
+
+NAME                                         READY   STATUS    RESTARTS        AGE    IP           NODE       NOMINATED NODE   READINESS GATES
+pod/gart-gallery-frontend-694b4bd68d-ds74v   1/1     Running   1 (5m14s ago)   48m    10.244.0.3   minikube   <none>           <none>
+pod/gart-gallery-frontend-694b4bd68d-s4t4p   1/1     Running   1 (5m14s ago)   48m    10.244.0.2   minikube   <none>           <none>
+pod/works-postgres-0                         1/1     Running   0               3m4s   10.244.0.6   minikube   <none>           <none>
+pod/works-service-6bf74c9dc4-ctskq           1/1     Running   0               3m4s   10.244.0.5   minikube   <none>           <none>
+
+NAME                            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE    SELECTOR
+service/gart-gallery-frontend   ClusterIP   10.106.210.11   <none>        80/TCP     48m    app.kubernetes.io/name=gart-gallery-frontend
+service/works-postgres          ClusterIP   None            <none>        5432/TCP   3m4s   app.kubernetes.io/name=works-postgres
+service/works-service           ClusterIP   10.107.68.81    <none>        3002/TCP   3m4s   app.kubernetes.io/name=works-service
+
+NAME                                          STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE    VOLUMEMODE
+persistentvolumeclaim/data-works-postgres-0   Bound    pvc-fdf643ee-cb25-4144-b80b-b0785c3acb5e   1Gi        RWO            standard       <unset>                 3m4s   Filesystem
+
+=== API Works ===
+GET /health: HTTP 200 - {"service":"works","status":"ok"}
+GET /api/works?limit=10: HTTP 200 - 4 obras; total 4
+GET /api/works?q=Travesía&limit=10: HTTP 200 - Travesía
+
+=== Frontend existente ===
+GET /: HTTP 200 - GART Gallery present: True

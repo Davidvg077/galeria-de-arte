@@ -60,6 +60,41 @@ guarda la salida real de `kubectl` junto con los resultados HTTP en
 `evidence\kubernetes\`. Los archivos generados sirven como evidencia de la
 versión desplegada y deben revisarse antes de publicarse.
 
+## Servicio Works y PostgreSQL
+
+El microservicio Works ofrece búsqueda, filtros por categoría y paginación.
+Su Deployment usa una cuenta no privilegiada, probes de salud y límites de
+recursos. El StatefulSet de PostgreSQL mantiene los datos en un volumen
+persistente de 1 GiB. La base de datos solo se expone dentro del clúster.
+
+Desde la raíz del repositorio, ejecuta el script de despliegue:
+
+```powershell
+.\scripts\deploy-works-to-minikube.ps1
+```
+
+El script construye y carga la imagen local, genera aleatoriamente las
+credenciales en un Secret de Kubernetes (no en el repositorio) y espera a que
+PostgreSQL y Works estén listos. Conserva el Secret existente en ejecuciones
+posteriores para no desincronizar la contraseña con el volumen de datos.
+
+En una terminal aparte, expón el API:
+
+```powershell
+kubectl port-forward -n gart-gallery service/works-service 3002:3002
+```
+
+Comprueba el servicio y sus datos de ejemplo en otra terminal:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:3002/health
+Invoke-RestMethod http://127.0.0.1:3002/api/works
+```
+
+El PostgreSQL local del clúster contiene los datos de este servicio; no es una
+base de datos para producción. Mantén el Secret fuera de Git y no uses esta
+configuración de desarrollo para datos reales.
+
 Para ver el estado en cualquier momento:
 
 ```powershell
