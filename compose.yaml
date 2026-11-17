@@ -42,6 +42,10 @@ services:
         condition: service_started
       frontend-backup:
         condition: service_started
+      works-service:
+        condition: service_healthy
+      gallery-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
       interval: 10s
@@ -89,6 +93,31 @@ services:
         - python
         - -c
         - from urllib.request import urlopen; urlopen("http://127.0.0.1:3002/health", timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app
+
+  gallery-service:
+    image: gart-gallery-gallery:local
+    build:
+      context: .
+      dockerfile: services/gallery-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql://works:${POSTGRES_PASSWORD:?Run scripts/deploy-docker.ps1 to create the local password file}@postgres:5432/gart_gallery
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; urlopen("http://127.0.0.1:3001/health", timeout=3)
       interval: 10s
       timeout: 5s
       retries: 5

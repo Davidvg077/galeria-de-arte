@@ -36,6 +36,11 @@ try {
         throw 'Docker Compose failed to build or start the application.'
     }
 
+    & $docker compose --env-file $envFile -f $compose up --detach --force-recreate frontend-proxy
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Docker Compose failed to reload the API proxy configuration.'
+    }
+
     $deadline = (Get-Date).AddMinutes(3)
     $ready = $false
     while ((Get-Date) -lt $deadline) {
@@ -44,9 +49,13 @@ try {
             try {
                 $page = Invoke-WebRequest -Uri 'http://127.0.0.1:8080/' -TimeoutSec 5
                 $api = Invoke-WebRequest -Uri 'http://127.0.0.1:3002/health' -TimeoutSec 5
+                $works = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/works?limit=4' -TimeoutSec 5
+                $galleries = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/galleries' -TimeoutSec 5
                 if ($page.StatusCode -eq 200 -and
                     $page.Content -match 'GART Gallery' -and
-                    $api.StatusCode -eq 200) {
+                    $api.StatusCode -eq 200 -and
+                    $works.items.Count -gt 0 -and
+                    $galleries.items.Count -gt 0) {
                     $ready = $true
                     break
                 }
@@ -60,7 +69,7 @@ try {
 
     if (-not $ready) {
         & $docker compose --env-file $envFile -f $compose ps
-        throw 'The frontend or Works API did not become healthy within three minutes.'
+        throw 'The frontend, Works API, or Gallery API did not become healthy within three minutes.'
     }
 
     $composeArguments = @('--env-file', $envFile, '-f', $compose)
@@ -75,6 +84,11 @@ try {
         if ($fallbackPage.StatusCode -ne 200 -or $fallbackPage.Content -notmatch 'GART Gallery') {
             throw 'The public frontend did not fail over to its backup.'
         }
+        $fallbackWorks = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/works?limit=4' -TimeoutSec 10
+        $fallbackGalleries = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/galleries' -TimeoutSec 10
+        if ($fallbackWorks.items.Count -eq 0 -or $fallbackGalleries.items.Count -eq 0) {
+            throw 'The APIs did not remain available during the frontend failover.'
+        }
         Write-Output 'Automatic failover verified: the main URL served the backup after stopping the primary.'
     } finally {
         & $docker compose @composeArguments start frontend-primary
@@ -84,26 +98,74 @@ try {
     }
 
     $deadline = (Get-Date).AddSeconds(60)
+    $recovered = $false
+    $recoveryError = $null
     do {
         try {
             $page = Invoke-WebRequest -Uri 'http://127.0.0.1:8080/' -TimeoutSec 5
-            if ($page.StatusCode -eq 200 -and $page.Content -match 'GART Gallery') {
+            $primaryContainer = & $docker compose @composeArguments ps -q frontend-primary
+            if ($LASTEXITCODE -ne 0 -or -not $primaryContainer) {
+                throw 'Could not identify the primary frontend container.'
+            }
+            $primaryHealth = & $docker inspect --format '{{.State.Health.Status}}' $primaryContainer
+            if ($LASTEXITCODE -ne 0) {
+                throw 'Could not read the primary frontend health status.'
+            }
+            if ($page.StatusCode -eq 200 -and
+                $page.Content -match 'GART Gallery' -and
+                $primaryHealth -eq 'healthy') {
+                $recovered = $true
                 break
             }
         } catch {
-            Start-Sleep -Seconds 3
+            $recoveryError = $_.Exception.Message
         }
+        Start-Sleep -Seconds 3
     } while ((Get-Date) -lt $deadline)
 
-    if ($page.StatusCode -ne 200 -or $page.Content -notmatch 'GART Gallery') {
-        throw 'The main frontend did not recover after the failover check.'
+    if (-not $recovered) {
+        if ($recoveryError) {
+            throw "The primary frontend did not become healthy after the failover check: $recoveryError"
+        }
+        throw "The primary frontend did not become healthy after the failover check (health: $primaryHealth)."
     }
 
-    & $docker compose @composeArguments ps
+    $composeStatus = & $docker compose @composeArguments ps
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not collect the final Docker Compose status.'
+    }
+
+    $evidenceDirectory = Join-Path $repositoryRoot 'evidence\docker'
+    New-Item -ItemType Directory -Path $evidenceDirectory -Force | Out-Null
+    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $evidenceFile = Join-Path $evidenceDirectory "docker-api-check-$timestamp.txt"
+    @(
+        "Local time: $(Get-Date -Format o)"
+        'Stack: gart-gallery'
+        ''
+        '=== Docker Compose ==='
+        $composeStatus
+        ''
+        '=== Website API responses through the primary URL ==='
+        "GET /: HTTP $($page.StatusCode) - GART Gallery present"
+        "GET /api/works?limit=4: HTTP 200 - $($works.items.Count) works"
+        "GET /api/galleries: HTTP 200 - $($galleries.items.Count) galleries"
+        ''
+        '=== Failover ==='
+        'The primary frontend was stopped temporarily; the main URL and both APIs continued to respond via the backup.'
+        "GET /api/works?limit=4 during failover: HTTP 200 - $($fallbackWorks.items.Count) works"
+        "GET /api/galleries during failover: HTTP 200 - $($fallbackGalleries.items.Count) galleries"
+        "Primary recovered: Docker health=$primaryHealth; main URL returned HTTP $($page.StatusCode)"
+        ''
+        'Local database credentials are excluded from this evidence.'
+    ) | Set-Content -Path $evidenceFile -Encoding utf8
+
+    Write-Output "Evidence: $evidenceFile"
     Write-Output ''
     Write-Output 'Main site:  http://127.0.0.1:8080/'
     Write-Output 'Backup:     http://127.0.0.1:8081/'
     Write-Output 'Works API:  http://127.0.0.1:3002/docs'
+    Write-Output 'Works and galleries APIs are proxied under /api/ on the main site.'
 } finally {
     Pop-Location
 }

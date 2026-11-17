@@ -1,0 +1,24 @@
+Local time: 2026-11-17T12:54:12.3424578-05:00
+Stack: gart-gallery
+
+=== Docker Compose ===
+NAME                              IMAGE                                                                     COMMAND                  SERVICE            CREATED          STATUS                    PORTS
+gart-gallery-frontend-backup-1    sha256:145c281a26159d4812e48a198f5565c2c49a43941faf41dd30bfeeb2a3654f3c   "/docker-entrypoint.…"   frontend-backup    4 hours ago      Up 9 minutes (healthy)    127.0.0.1:8081->8080/tcp
+gart-gallery-frontend-primary-1   sha256:145c281a26159d4812e48a198f5565c2c49a43941faf41dd30bfeeb2a3654f3c   "/docker-entrypoint.…"   frontend-primary   4 hours ago      Up 7 seconds (healthy)    8080/tcp
+gart-gallery-frontend-proxy-1     nginx:1.27-alpine                                                         "/docker-entrypoint.…"   frontend-proxy     17 seconds ago   Up 14 seconds (healthy)   127.0.0.1:8080->8080/tcp
+gart-gallery-gallery-service-1    sha256:db10116c8f2ca17a2c46207e23d617ce850eecaa4c3187c5055de39b30a3ba1d   "uvicorn app:app --h…"   gallery-service    26 minutes ago   Up 9 minutes (healthy)    3001/tcp
+gart-gallery-postgres-1           postgres:16-alpine                                                        "docker-entrypoint.s…"   postgres           4 hours ago      Up 9 minutes (healthy)    5432/tcp
+gart-gallery-works-service-1      sha256:e3255f78fee0a8ecc9cc0912d94e5f0188cd2614117e81e59c9061a83cb4f0c4   "uvicorn app:app --h…"   works-service      4 hours ago      Up 9 minutes (healthy)    127.0.0.1:3002->3002/tcp
+
+=== Website API responses through the primary URL ===
+GET /: HTTP 200 - GART Gallery present
+GET /api/works?limit=4: HTTP 200 - 4 works
+GET /api/galleries: HTTP 200 - 4 galleries
+
+=== Failover ===
+The primary frontend was stopped temporarily; the main URL and both APIs continued to respond via the backup.
+GET /api/works?limit=4 during failover: HTTP 200 - 4 works
+GET /api/galleries during failover: HTTP 200 - 4 galleries
+Primary recovered: Docker health=healthy; main URL returned HTTP 200
+
+Local database credentials are excluded from this evidence.
