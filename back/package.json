@@ -1,0 +1,23 @@
+{
+  "name": "gart-gallery-backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "api-gateway/server.js",
+  "scripts": {
+    "start": "node api-gateway/server.js",
+    "dev": "node api-gateway/server.js",
+    "db:init": "python services/init_db.py",
+    "test:integration": "node scripts/test-integration.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "http-proxy-middleware": "^4.2.0",
+    "multer": "^2.2.0",
+    "pg": "^8.22.0"
+  }
+}

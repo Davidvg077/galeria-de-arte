@@ -1,0 +1,207 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+---
+<MainLayout title="Carrito">
+  <section class="page cart-page">
+    <p class="eyebrow">COMPRA SEGURA</p>
+    <h1>Tu carrito</h1>
+    <p class="intro">Confirma tu correo para preparar un pedido seguro. Este proceso no realiza cobros.</p>
+    <div id="cart-items" class="cart-items" aria-live="polite"></div>
+    <div id="cart-summary" class="cart-summary hidden">
+      <p>Los precios se vuelven a validar al preparar el pedido.</p>
+      <button id="checkout-button" class="button" type="button">Continuar con la compra</button>
+    </div>
+    <form id="confirmation-form" class="card confirmation-form hidden">
+      <h2>Confirma tu identidad</h2>
+      <p>Ingresa el código enviado a tu correo. Tu pedido quedará pendiente de pago; no se realizará ningún cobro.</p>
+      <label for="checkout-code">Código de seis dígitos</label>
+      <input id="checkout-code" name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required />
+      <button class="button" type="submit">Confirmar pedido</button>
+      <button id="resend-code" class="text-button" type="button">Enviar otro código</button>
+    </form>
+    <p id="cart-status" class="cart-status" role="status" aria-live="polite"></p>
+  </section>
+</MainLayout>
+
+<style is:global>
+  .cart-items { display: grid; gap: 14px; margin-top: 28px; }
+  .cart-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 20px; background: #fff; border: 1px solid #e5e3dd; border-radius: 5px; }
+  .cart-row h2 { margin: 0 0 5px; font-size: 21px; }
+  .cart-row p { margin: 4px 0; color: #73736f; font-size: 13px; }
+  .cart-row img { width: 100px; height: 80px; object-fit: cover; background: #e8e6df; }
+  .cart-row-main { display: flex; align-items: center; gap: 18px; min-width: 0; }
+  .cart-row button, .text-button { color: #80602e; border: 0; background: transparent; text-decoration: underline; cursor: pointer; }
+  .cart-summary { display: grid; justify-items: end; gap: 8px; margin-top: 20px; padding: 20px; background: #fff; border: 1px solid #e5e3dd; }
+  .cart-summary p, .confirmation-form p { color: #73736f; font-size: 13px; line-height: 1.6; }
+  .confirmation-form { display: grid; justify-items: start; gap: 12px; max-width: 520px; margin-top: 22px; }
+  .confirmation-form h2, .confirmation-form p { margin: 0; }
+  .confirmation-form input { width: 100%; max-width: 260px; padding: 12px; border: 1px solid #dcd9d1; font: inherit; }
+  .cart-status { min-height: 24px; color: #555; }
+  .cart-status.error { color: #a0473f; }
+  .hidden { display: none !important; }
+  @media (max-width: 600px) { .cart-row { grid-template-columns: 1fr; } .cart-row-main { align-items: flex-start; } .cart-row img { width: 76px; height: 70px; } .cart-summary { justify-items: stretch; } }
+</style>
+
+<script>
+  const cartKey = 'gart.cart';
+  const list = document.querySelector('#cart-items');
+  const summary = document.querySelector('#cart-summary');
+  const confirmationForm = document.querySelector('#confirmation-form');
+  const status = document.querySelector('#cart-status');
+  const checkoutButton = document.querySelector('#checkout-button');
+  let checkoutId = null;
+  let checkoutItems = [];
+
+  const showStatus = (message, error = false) => {
+    status.textContent = message;
+    status.classList.toggle('error', error);
+  };
+  const readCart = () => {
+    try {
+      const value = JSON.parse(localStorage.getItem(cartKey) || '[]');
+      return Array.isArray(value) ? value.filter((item) => Number.isInteger(item.work_id) && item.work_id > 0) : [];
+    } catch {
+      return [];
+    }
+  };
+  const saveCart = (items) => {
+    localStorage.setItem(cartKey, JSON.stringify(items));
+    checkoutItems = items;
+  };
+  const api = async (url, options = {}) => {
+    const response = await fetch(url, { credentials: 'same-origin', ...options });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 401) window.location.assign('/login');
+      throw new Error(data.detail || 'No se pudo completar la compra.');
+    }
+    return data;
+  };
+  const money = (value) => value == null ? 'Consultar precio' : `$ ${Number(value).toLocaleString('es-CO')}`;
+  const safeImageUrl = (value) => {
+    if (typeof value !== 'string' || value.trim() === '') return '/images/artwork-fallback.svg';
+    try {
+      const url = new URL(value, window.location.origin);
+      return ['https:', 'http:'].includes(url.protocol) ? url.href : '/images/artwork-fallback.svg';
+    } catch {
+      return '/images/artwork-fallback.svg';
+    }
+  };
+
+  async function renderCart() {
+    const items = readCart();
+    checkoutItems = items;
+    list.replaceChildren();
+    summary.classList.toggle('hidden', items.length === 0);
+    if (!items.length) {
+      const empty = document.createElement('article');
+      empty.className = 'card';
+      const heading = document.createElement('h2');
+      heading.textContent = 'Carrito vacío';
+      const text = document.createElement('p');
+      text.textContent = 'Explora las obras disponibles y agrega las que te interesan.';
+      const link = document.createElement('a');
+      link.className = 'button';
+      link.href = '/works';
+      link.textContent = 'Explorar obras';
+      empty.append(heading, text, link);
+      list.append(empty);
+      return;
+    }
+
+    for (const item of items) {
+      try {
+        const work = await api(`/api/works/${encodeURIComponent(item.work_id)}`);
+        const row = document.createElement('article');
+        row.className = 'cart-row';
+        const main = document.createElement('div');
+        main.className = 'cart-row-main';
+        const image = document.createElement('img');
+        image.src = safeImageUrl(work.image_url);
+        image.alt = work.title;
+        image.loading = 'lazy';
+        const details = document.createElement('div');
+        const title = document.createElement('h2');
+        title.textContent = work.title;
+        const price = document.createElement('p');
+        price.textContent = `${money(work.price)} · Cantidad: ${item.quantity || 1}`;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = 'Quitar';
+        remove.addEventListener('click', () => {
+          saveCart(readCart().filter((entry) => entry.work_id !== item.work_id));
+          renderCart();
+        });
+        details.append(title, price, remove);
+        main.append(image, details);
+        row.append(main);
+        list.append(row);
+      } catch {
+        showStatus('No se pudo cargar una obra del carrito. Puedes quitarla e intentarlo de nuevo.', true);
+      }
+    }
+  }
+
+  const requestedWork = Number(new URLSearchParams(location.search).get('work'));
+  if (Number.isInteger(requestedWork) && requestedWork > 0) {
+    const items = readCart();
+    if (!items.some((item) => item.work_id === requestedWork)) items.push({ work_id: requestedWork, quantity: 1 });
+    saveCart(items);
+    history.replaceState(null, '', '/cart');
+  }
+  renderCart();
+
+  checkoutButton.addEventListener('click', async () => {
+    checkoutButton.disabled = true;
+    try {
+      await api('/api/auth/me');
+      const checkout = await api('/api/purchases/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({ items: checkoutItems }),
+      });
+      checkoutId = checkout.id;
+      confirmationForm.classList.remove('hidden');
+      showStatus(`Código enviado. Total validado por el servidor: ${money(checkout.total)}.`);
+    } catch (error) {
+      showStatus(error.message, true);
+    } finally {
+      checkoutButton.disabled = false;
+    }
+  });
+
+  confirmationForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!checkoutId) return;
+    const button = confirmationForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const order = await api(`/api/purchases/${encodeURIComponent(checkoutId)}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: new FormData(confirmationForm).get('code') }),
+      });
+      saveCart([]);
+      confirmationForm.classList.add('hidden');
+      showStatus(`Pedido #${order.id} confirmado y pendiente de pago. No se realizó ningún cobro.`);
+      await renderCart();
+    } catch (error) {
+      showStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#resend-code').addEventListener('click', async () => {
+    if (!checkoutId) return;
+    try {
+      await api(`/api/purchases/${encodeURIComponent(checkoutId)}/code`, { method: 'POST' });
+      showStatus('Te enviamos un nuevo código de confirmación.');
+    } catch (error) {
+      showStatus(error.message, true);
+    }
+  });
+</script>

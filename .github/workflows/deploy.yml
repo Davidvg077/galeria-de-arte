@@ -25,8 +25,9 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./back
           push: true
+          file: ./back/Dockerfile
           tags: ghcr.io/karen1554/gart-gallery/backend-api:latest
 
       - name: Azure Login

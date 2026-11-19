@@ -1,0 +1,31 @@
+Local time: 2026-11-18T22:09:42.9576619-05:00
+Stack: gart-gallery
+
+=== Docker Compose ===
+NAME                              IMAGE                         COMMAND                  SERVICE            CREATED          STATUS                    PORTS
+gart-gallery-auth-service-1       gart-gallery-auth:local       "sh -c 'uvicorn app:…"   auth-service       32 seconds ago   Up 30 seconds (healthy)   127.0.0.1:3003->3003/tcp
+gart-gallery-content-service-1    gart-gallery-content:local    "sh -c 'uvicorn app:…"   content-service    31 seconds ago   Up 24 seconds (healthy)   127.0.0.1:3005->3005/tcp
+gart-gallery-frontend-backup-1    gart-gallery-frontend:local   "/docker-entrypoint.…"   frontend-backup    32 seconds ago   Up 30 seconds (healthy)   127.0.0.1:8081->8080/tcp
+gart-gallery-frontend-primary-1   gart-gallery-frontend:local   "/docker-entrypoint.…"   frontend-primary   32 seconds ago   Up 7 seconds (healthy)    8080/tcp
+gart-gallery-frontend-proxy-1     nginx:1.27-alpine             "/docker-entrypoint.…"   frontend-proxy     17 seconds ago   Up 15 seconds (healthy)   127.0.0.1:8080->8080/tcp
+gart-gallery-gallery-service-1    gart-gallery-gallery:local    "uvicorn app:app --h…"   gallery-service    32 seconds ago   Up 29 seconds (healthy)   127.0.0.1:3001->3001/tcp
+gart-gallery-postgres-1           postgres:16-alpine            "docker-entrypoint.s…"   postgres           33 hours ago     Up 2 minutes (healthy)    5432/tcp
+gart-gallery-purchase-service-1   gart-gallery-purchase:local   "sh -c 'uvicorn app:…"   purchase-service   31 seconds ago   Up 24 seconds (healthy)   127.0.0.1:3004->3004/tcp
+gart-gallery-works-service-1      gart-gallery-works:local      "uvicorn app:app --h…"   works-service      32 seconds ago   Up 29 seconds (healthy)   127.0.0.1:3002->3002/tcp
+
+=== Website API responses through the primary URL ===
+GET /: HTTP 200 - GART Gallery present
+GET /api/works?limit=4: HTTP 200 - 4 works
+GET /api/galleries: HTTP 200 - 4 galleries
+GET /api/content/landing: HTTP 200
+GET /api/auth/me unauthenticated: HTTP 401
+GET /api/purchases unauthenticated: HTTP 401
+
+=== Failover ===
+The primary frontend was stopped temporarily; the main URL and both APIs continued to respond via the backup.
+GET /api/works?limit=4 during failover: HTTP 200 - 4 works
+GET /api/galleries during failover: HTTP 200 - 4 galleries
+Content, Auth and Purchase routes remained reachable during failover.
+Primary recovered: Docker health=healthy; main URL returned HTTP 200
+
+Local database credentials are excluded from this evidence.

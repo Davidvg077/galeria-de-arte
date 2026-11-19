@@ -1,0 +1,279 @@
+name: gart-gallery
+
+services:
+  frontend-primary:
+    image: gart-gallery-frontend:local
+    build:
+      context: ../front
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app
+
+  frontend-backup:
+    image: gart-gallery-frontend:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app
+
+  frontend-proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./deploy/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      frontend-primary:
+        condition: service_started
+      frontend-backup:
+        condition: service_started
+      works-service:
+        condition: service_healthy
+      gallery-service:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      purchase-service:
+        condition: service_healthy
+      content-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - app
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gart_gallery
+      POSTGRES_USER: works
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run back/scripts/deploy-compose.ps1 to create the local password file}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U works -d gart_gallery"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - app
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks:
+      - app
+
+  works-service:
+    image: gart-gallery-works:local
+    build:
+      context: .
+      dockerfile: services/works-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:4321}
+      AUTH_SERVICE_URL: http://auth-service:3003
+      DATABASE_URL: postgresql://works:${POSTGRES_PASSWORD:?Run back/scripts/deploy-compose.ps1 to create the local password file}@postgres:5432/gart_gallery
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3002:3002"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; urlopen("http://127.0.0.1:3002/health", timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app
+
+  gallery-service:
+    image: gart-gallery-gallery:local
+    build:
+      context: .
+      dockerfile: services/gallery-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:4321}
+      AUTH_SERVICE_URL: http://auth-service:3003
+      DATABASE_URL: postgresql://works:${POSTGRES_PASSWORD:?Run back/scripts/deploy-compose.ps1 to create the local password file}@postgres:5432/gart_gallery
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3001:3001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; urlopen("http://127.0.0.1:3001/health", timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app
+
+  auth-service:
+    image: gart-gallery-auth:local
+    build:
+      context: .
+      dockerfile: services/Dockerfile.python
+      args:
+        SERVICE_DIRECTORY: auth-service
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:4321}
+      PORT: 3003
+      COOKIE_SECURE: "false"
+      DATABASE_URL: postgresql://works:${POSTGRES_PASSWORD:?Run back/scripts/deploy-compose.ps1 to create the local password file}@postgres:5432/gart_gallery
+      TOKEN_PEPPER: ${TOKEN_PEPPER:?Run back/scripts/deploy-compose.ps1 to create the local token pepper}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-GART Gallery <no-reply@gart-gallery.local>}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    ports:
+      - "127.0.0.1:3003:3003"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; urlopen("http://127.0.0.1:3003/health", timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app
+
+  purchase-service:
+    image: gart-gallery-purchase:local
+    build:
+      context: .
+      dockerfile: services/Dockerfile.python
+      args:
+        SERVICE_DIRECTORY: purchase-service
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:4321}
+      PORT: 3004
+      DATABASE_URL: postgresql://works:${POSTGRES_PASSWORD:?Run back/scripts/deploy-compose.ps1 to create the local password file}@postgres:5432/gart_gallery
+      TOKEN_PEPPER: ${TOKEN_PEPPER:?Run back/scripts/deploy-compose.ps1 to create the local token pepper}
+      AUTH_SERVICE_URL: http://auth-service:3003
+      WORKS_SERVICE_URL: http://works-service:3002
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-GART Gallery <no-reply@gart-gallery.local>}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      works-service:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    ports:
+      - "127.0.0.1:3004:3004"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; urlopen("http://127.0.0.1:3004/health", timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app
+
+  content-service:
+    image: gart-gallery-content:local
+    build:
+      context: .
+      dockerfile: services/Dockerfile.python
+      args:
+        SERVICE_DIRECTORY: content-service
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:4321}
+      PORT: 3005
+      DATABASE_URL: postgresql://works:${POSTGRES_PASSWORD:?Run back/scripts/deploy-compose.ps1 to create the local password file}@postgres:5432/gart_gallery
+      AUTH_SERVICE_URL: http://auth-service:3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3005:3005"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; urlopen("http://127.0.0.1:3005/health", timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app
+
+networks:
+  app:
+    name: gart-gallery-network
+
+volumes:
+  postgres-data:
+    name: gart-gallery-postgres-data

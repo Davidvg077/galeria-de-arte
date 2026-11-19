@@ -1,0 +1,213 @@
+---
+import MainLayout from '../../layouts/MainLayout.astro';
+const gateway = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env.DEV ? 'http://localhost:3000' : '');
+---
+<MainLayout title="Panel de artista">
+  <section class="page artist-page" data-gateway={gateway}>
+    <p class="eyebrow">ESPACIO DEL ARTISTA</p>
+    <h1>Gestiona tus obras</h1>
+    <p class="intro">Crea borradores, publica tus obras y mantén actualizado tu catálogo.</p>
+    <p id="artist-greeting" class="artist-greeting"></p>
+    <div class="artist-layout">
+      <form id="work-form" class="card artist-form">
+        <h2 id="form-title">Nueva obra</h2>
+        <label>Título<input name="title" required maxlength="200" /></label>
+        <label>Descripción<textarea name="description" rows="4" maxlength="5000"></textarea></label>
+        <div class="form-row">
+          <label>Año<input name="year" maxlength="10" inputmode="numeric" /></label>
+          <label>Precio (COP)<input name="price" type="number" min="0" step="1000" /></label>
+        </div>
+        <label>Categoría<input name="category" required maxlength="100" value="Landscape Paintings" /></label>
+        <label>URL de imagen<input name="image_url" type="url" maxlength="2048" placeholder="https://..." /></label>
+        <div class="form-actions">
+          <button class="button secondary hidden" id="cancel-edit" type="button">Cancelar edición</button>
+          <button class="button secondary" type="submit" data-status="draft">Guardar borrador</button>
+          <button class="button" type="submit" data-status="published">Publicar obra</button>
+        </div>
+      </form>
+      <section class="artist-works" aria-labelledby="works-heading">
+        <div class="works-heading"><h2 id="works-heading">Mis obras</h2><span id="work-count"></span></div>
+        <p id="artist-status" class="artist-status" role="status" aria-live="polite"></p>
+        <div id="artist-work-list" class="artist-work-list"><p>Cargando tus obras...</p></div>
+      </section>
+    </div>
+  </section>
+</MainLayout>
+
+<script>
+  import { getCurrentUser } from '../../scripts/auth.js';
+
+  const gateway = document.querySelector('.artist-page').dataset.gateway;
+  const form = document.querySelector('#work-form');
+  const list = document.querySelector('#artist-work-list');
+  const status = document.querySelector('#artist-status');
+  const count = document.querySelector('#work-count');
+  const cancelEdit = document.querySelector('#cancel-edit');
+  let editingId = null;
+  let works = [];
+
+  const setStatus = (message, error = false) => {
+    status.textContent = message;
+    status.classList.toggle('error', error);
+  };
+  const api = async (path, options = {}) => {
+    const response = await fetch(`${gateway}/api/works${path}`, {
+      credentials: 'include',
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || 'No se pudo completar la solicitud.');
+    return result;
+  };
+  const addText = (parent, tag, text, className = '') => {
+    const node = document.createElement(tag);
+    node.textContent = text;
+    if (className) node.className = className;
+    parent.append(node);
+    return node;
+  };
+  const actionButton = (label, action, workId, className = '') => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.dataset.action = action;
+    button.dataset.workId = String(workId);
+    button.className = className;
+    return button;
+  };
+  const renderWorks = () => {
+    list.replaceChildren();
+    count.textContent = `${works.length} ${works.length === 1 ? 'obra' : 'obras'}`;
+    if (!works.length) {
+      addText(list, 'p', 'Aún no tienes obras. Usa el formulario para crear tu primera publicación.');
+      return;
+    }
+
+    for (const work of works) {
+      const card = document.createElement('article');
+      card.className = 'card artist-work';
+      const details = document.createElement('div');
+      addText(details, 'h3', work.title);
+      addText(details, 'p', `${work.category} · ${work.year || 'Sin año'} · ${work.price == null ? 'Precio por consultar' : `$ ${Number(work.price).toLocaleString('es-CO')}`}`);
+      addText(details, 'span', work.moderation_status === 'published' ? 'Publicada' : 'Borrador', `status-badge ${work.moderation_status}`);
+      card.append(details);
+      const actions = document.createElement('div');
+      actions.className = 'work-actions';
+      actions.append(actionButton('Editar', 'edit', work.id, 'text-button'));
+      actions.append(actionButton('Eliminar', 'delete', work.id, 'text-button danger'));
+      card.append(actions);
+      list.append(card);
+    }
+  };
+  const loadWorks = async () => {
+    const result = await api('/mine');
+    works = result.items;
+    renderWorks();
+  };
+  const resetForm = () => {
+    form.reset();
+    form.elements.category.value = 'Landscape Paintings';
+    editingId = null;
+    document.querySelector('#form-title').textContent = 'Nueva obra';
+    cancelEdit.classList.add('hidden');
+  };
+
+  getCurrentUser()
+    .then((user) => {
+      if (!user || user.role !== 'ARTISTA') {
+        window.location.replace('/login');
+        return;
+      }
+      document.querySelector('#artist-greeting').textContent = `Bienvenido, ${user.username}. Desde aquí puedes publicar y administrar tus obras.`;
+      return loadWorks();
+    })
+    .catch((error) => {
+      console.error('No se pudieron cargar las obras del artista.', error);
+      setStatus(error.message, true);
+      list.textContent = 'No se pudieron cargar tus obras.';
+    });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submitter = event.submitter || form.querySelector('button[type="submit"]');
+    const payload = Object.fromEntries(new FormData(form));
+    payload.price = payload.price === '' ? null : Number(payload.price);
+    payload.image_url = payload.image_url || null;
+    payload.status = submitter.dataset.status;
+    try {
+      await api(editingId ? `/${editingId}/submission` : '/submissions', {
+        method: editingId ? 'PUT' : 'POST',
+        body: JSON.stringify(payload),
+      });
+      setStatus(payload.status === 'published' ? 'La obra se publicó correctamente.' : 'Borrador guardado.');
+      resetForm();
+      await loadWorks();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+
+  cancelEdit.addEventListener('click', resetForm);
+  list.addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    const work = works.find((item) => item.id === Number(button.dataset.workId));
+    if (!work) return;
+    if (button.dataset.action === 'edit') {
+      editingId = work.id;
+      for (const field of ['title', 'description', 'year', 'category', 'image_url', 'price']) {
+        form.elements[field].value = work[field] ?? '';
+      }
+      form.querySelectorAll('button[data-status]').forEach((item) => {
+        item.textContent = item.dataset.status === work.moderation_status
+          ? (item.dataset.status === 'published' ? 'Guardar cambios publicados' : 'Guardar borrador')
+          : (item.dataset.status === 'published' ? 'Publicar obra' : 'Guardar borrador');
+      });
+      document.querySelector('#form-title').textContent = 'Editar obra';
+      cancelEdit.classList.remove('hidden');
+      form.elements.title.focus();
+      return;
+    }
+
+    if (!window.confirm(`¿Eliminar "${work.title}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api(`/${work.id}/submission`, { method: 'DELETE' });
+      setStatus('La obra se eliminó.');
+      await loadWorks();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+</script>
+
+<style>
+  .artist-page { max-width: 1280px; }
+  .artist-greeting { margin: 0; color: #80602e; font-size: 13px; }
+  .artist-layout { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(0, 1.2fr); gap: 28px; margin-top: 32px; align-items: start; }
+  .artist-form { display: grid; gap: 16px; }
+  .artist-form h2, .artist-works h2 { margin: 0; }
+  .artist-form label { display: grid; gap: 7px; color: #555; font-size: 12px; font-weight: 600; }
+  .artist-form input, .artist-form textarea { width: 100%; border: 1px solid #dcd9d1; border-radius: 3px; padding: 11px; color: #222; background: #fbfaf7; font: inherit; }
+  .artist-form textarea { resize: vertical; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .form-actions .button { border: 0; cursor: pointer; margin: 0; }
+  .form-actions .secondary { background: #f0eee8; color: #35332f; }
+  .works-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  #work-count { color: #777; font-size: 12px; }
+  .artist-status { min-height: 20px; color: #4c6b3c; font-size: 13px; }
+  .artist-status.error { color: #a0473f; }
+  .artist-work-list { display: grid; gap: 12px; }
+  .artist-work { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 18px; }
+  .artist-work h3 { margin: 0 0 5px; font-size: 17px; }
+  .artist-work p { margin: 0 0 10px; color: #777; font-size: 12px; }
+  .status-badge { display: inline-block; padding: 4px 8px; border-radius: 99px; background: #f1eee5; color: #725a30; font-size: 10px; font-weight: 700; }
+  .status-badge.published { background: #e7f1e7; color: #426c41; }
+  .work-actions { display: flex; gap: 14px; flex-shrink: 0; }
+  .text-button { border: 0; padding: 4px 0; background: transparent; color: #80602e; cursor: pointer; font: inherit; text-decoration: underline; }
+  .text-button.danger { color: #a0473f; }
+  .hidden { display: none !important; }
+  @media (max-width: 800px) { .artist-layout { grid-template-columns: 1fr; } }
+  @media (max-width: 480px) { .artist-work { align-items: flex-start; flex-direction: column; } }
+</style>

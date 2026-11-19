@@ -1,0 +1,7 @@
+node_modules/
+__pycache__/
+**/__pycache__/
+services/*/data/
+.env
+.env.*
+!.env.example

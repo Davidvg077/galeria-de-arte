@@ -1,0 +1,39 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+const gateway = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env.DEV ? 'http://localhost:3000' : '');
+---
+<MainLayout title="Artistas"><section class="page"><p class="eyebrow">TALENTO Y TRAYECTORIA</p><h1>Artistas</h1><p class="intro">Descubre las historias detrás de cada obra.</p><div class="cards" id="artist-list" aria-live="polite"><p>Cargando artistas...</p></div></section></MainLayout>
+<script define:vars={{ gateway }}>
+  const list = document.querySelector('#artist-list');
+  const addText = (parent, tag, value) => {
+    const node = document.createElement(tag);
+    node.textContent = value ?? '';
+    parent.append(node);
+  };
+  fetch(`${gateway}/api/artists`)
+    .then((response) => {
+      if (!response.ok) throw new Error(`Artists API returned ${response.status}`);
+      return response.json();
+    })
+    .then((data) => {
+      list.replaceChildren();
+      for (const artist of data.items || []) {
+        const card = document.createElement('article');
+        card.className = 'card';
+        addText(card, 'h2', artist.name);
+        addText(card, 'p', artist.biography);
+        const link = document.createElement('a');
+        link.className = 'button';
+        link.href = `/works?artist=${encodeURIComponent(artist.id)}`;
+        link.textContent = 'Ver obras';
+        card.append(link);
+        list.append(card);
+      }
+    })
+    .catch((error) => {
+      console.error('No se pudieron cargar los artistas.', error);
+      const message = document.createElement('p');
+      message.textContent = 'No se pudieron cargar los artistas.';
+      list.replaceChildren(message);
+    });
+</script>
