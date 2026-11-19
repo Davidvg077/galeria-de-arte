@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: gart-gallery
+    name: gart-gallery-v2
     env: node
     plan: free
     buildCommand: cd front && npm ci --include=dev && npm run astro:build && cd ../back && npm ci
@@ -13,31 +13,31 @@ services:
       - key: GALLERY_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-gallery
+          name: gart-gallery-gallery-v2
           property: hostport
       - key: WORKS_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-works
+          name: gart-gallery-works-v2
           property: hostport
       - key: AUTH_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-auth
+          name: gart-gallery-auth-v2
           property: hostport
       - key: PURCHASE_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-purchase
+          name: gart-gallery-purchase-v2
           property: hostport
       - key: CONTENT_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-content
+          name: gart-gallery-content-v2
           property: hostport
 
   - type: web
-    name: gart-gallery-gallery
+    name: gart-gallery-gallery-v2
     env: python
     plan: free
     buildCommand: cd back && pip install -r services/requirements.txt
@@ -45,18 +45,18 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: gart-gallery-db
+          name: gart-gallery-db-v2
           property: connectionString
       - key: ENVIRONMENT
         value: production
       - key: AUTH_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-auth
+          name: gart-gallery-auth-v2
           property: hostport
 
   - type: web
-    name: gart-gallery-works
+    name: gart-gallery-works-v2
     env: python
     plan: free
     buildCommand: cd back && pip install -r services/requirements.txt
@@ -64,18 +64,18 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: gart-gallery-db
+          name: gart-gallery-db-v2
           property: connectionString
       - key: ENVIRONMENT
         value: production
       - key: AUTH_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-auth
+          name: gart-gallery-auth-v2
           property: hostport
 
   - type: web
-    name: gart-gallery-auth
+    name: gart-gallery-auth-v2
     env: python
     plan: free
     buildCommand: cd back && pip install -r services/requirements.txt
@@ -83,7 +83,7 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: gart-gallery-db
+          name: gart-gallery-db-v2
           property: connectionString
       - key: ENVIRONMENT
         value: production
@@ -107,7 +107,7 @@ services:
         sync: false
 
   - type: web
-    name: gart-gallery-purchase
+    name: gart-gallery-purchase-v2
     env: python
     plan: free
     buildCommand: cd back && pip install -r services/requirements.txt
@@ -115,19 +115,19 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: gart-gallery-db
+          name: gart-gallery-db-v2
           property: connectionString
       - key: ENVIRONMENT
         value: production
       - key: AUTH_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-auth
+          name: gart-gallery-auth-v2
           property: hostport
       - key: WORKS_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-works
+          name: gart-gallery-works-v2
           property: hostport
       - key: TOKEN_PEPPER
         sync: false
@@ -143,7 +143,7 @@ services:
         sync: false
 
   - type: web
-    name: gart-gallery-content
+    name: gart-gallery-content-v2
     env: python
     plan: free
     buildCommand: cd back && pip install -r services/requirements.txt
@@ -151,16 +151,16 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: gart-gallery-db
+          name: gart-gallery-db-v2
           property: connectionString
       - key: ENVIRONMENT
         value: production
       - key: AUTH_SERVICE_URL
         fromService:
           type: web
-          name: gart-gallery-auth
+          name: gart-gallery-auth-v2
           property: hostport
 
 databases:
-  - name: gart-gallery-db
+  - name: gart-gallery-db-v2
     plan: free
