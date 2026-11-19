@@ -11,30 +11,15 @@ services:
       - key: NODE_ENV
         value: production
       - key: GALLERY_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-gallery-v2
-          property: hostport
+        value: https://gart-gallery-gallery-v2.onrender.com
       - key: WORKS_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-works-v2
-          property: hostport
+        value: https://gart-gallery-works-v2.onrender.com
       - key: AUTH_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-auth-v2
-          property: hostport
+        value: https://gart-gallery-auth-v2.onrender.com
       - key: PURCHASE_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-purchase-v2
-          property: hostport
+        value: https://gart-gallery-purchase-v2.onrender.com
       - key: CONTENT_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-content-v2
-          property: hostport
+        value: https://gart-gallery-content-v2.onrender.com
 
   - type: web
     name: gart-gallery-gallery-v2
