@@ -35,10 +35,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: AUTH_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-auth-v2
-          property: hostport
+        value: https://gart-gallery-auth-v2.onrender.com
 
   - type: web
     name: gart-gallery-works-v2
@@ -54,10 +51,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: AUTH_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-auth-v2
-          property: hostport
+        value: https://gart-gallery-auth-v2.onrender.com
 
   - type: web
     name: gart-gallery-auth-v2
@@ -105,15 +99,9 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: AUTH_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-auth-v2
-          property: hostport
+        value: https://gart-gallery-auth-v2.onrender.com
       - key: WORKS_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-works-v2
-          property: hostport
+        value: https://gart-gallery-works-v2.onrender.com
       - key: TOKEN_PEPPER
         sync: false
       - key: SMTP_HOST
@@ -141,10 +129,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: AUTH_SERVICE_URL
-        fromService:
-          type: web
-          name: gart-gallery-auth-v2
-          property: hostport
+        value: https://gart-gallery-auth-v2.onrender.com
 
 databases:
   - name: gart-gallery-db-v2
