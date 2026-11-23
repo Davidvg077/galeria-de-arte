@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "build": "astro build",
+    "test:e2e": "playwright test",
     "astro:dev": "astro dev",
     "astro:build": "astro build",
     "astro:preview": "astro preview"
@@ -15,6 +16,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "astro": "^5.13.5"
   }
 }

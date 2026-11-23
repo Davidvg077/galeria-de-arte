@@ -5,3 +5,5 @@ dist/
 .env.astro
 .env*
 !.env.astro.example
+test-results/
+playwright-report/
