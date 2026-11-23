@@ -38,15 +38,15 @@ API antes y durante el failover en `back\evidence\docker\`, sin incluir secretos
 
 El proxy envía tráfico al frontend principal; si este falla, reintenta contra la
 copia. Ambos usan la misma imagen, pero se ejecutan como contenedores distintos.
-Docker Desktop muestra diez contenedores: proxy, dos frontends, cinco
-microservicios, PostgreSQL y Mailpit para capturar correos de prueba. Los
+Docker Desktop muestra nueve contenedores: proxy, dos frontends, cinco
+microservicios y PostgreSQL. Los
 servicios Auth, Purchase y Content también están disponibles detrás del proxy.
 Los puertos directos de los microservicios están enlazados solo a `127.0.0.1`
 para facilitar pruebas locales; el frontend debe usar el proxy del puerto 8080.
 Si se ejecuta Astro en modo desarrollo (puerto 4321), configura
 `FRONTEND_ORIGIN=http://localhost:4321` en el entorno de los servicios.
 
-## Configuración de cuentas y correo
+## Cuentas y verificaciones de demostración
 
 No se crea una cuenta de administrador con credenciales predeterminadas. Para
 provisionar el administrador local antes del primer arranque, configura
@@ -55,12 +55,12 @@ entorno desde el que ejecutas el script. Si el administrador anterior usaba la
 contraseña predeterminada `admin123`, la migración lo desactiva; configura una
 nueva contraseña para volver a habilitarlo.
 
-En Docker local, la verificación de correo, la recuperación de contraseñas y
-los códigos OTP de compra se envían a Mailpit, un buzón de pruebas que no
-entrega mensajes a Internet. Abre <http://127.0.0.1:8025/> para verlos. Para
-enviar correo real, configura `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
-`SMTP_PASSWORD`, `SMTP_FROM` y los valores adecuados de `SMTP_USE_SSL` o
-`SMTP_STARTTLS`. `TOKEN_PEPPER` se genera localmente; en Render debe
+El correo y el teléfono están en `Modo demostración`: no se configura SMTP,
+Mailpit, SMS ni un proveedor externo, y no se envían mensajes reales. Los OTP
+temporales se muestran únicamente a la sesión autenticada que los solicita;
+sus hashes se guardan en la base de datos, expiran, son de un solo uso y están
+limitados a cinco intentos. La recuperación de contraseña por correo está
+deshabilitada en este modo. `TOKEN_PEPPER` se genera localmente; en Render debe
 configurarse como un secreto aleatorio de al menos 32 caracteres. Un pedido
 confirmado queda en `pending_payment`; no se integra un proveedor de pagos ni
 se realiza ningún cobro.

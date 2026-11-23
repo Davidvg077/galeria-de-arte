@@ -8,6 +8,40 @@ import MainLayout from '../layouts/MainLayout.astro';
     <div class="card profile-card" id="profile-content" aria-live="polite">
       <p>Comprobando sesión...</p>
     </div>
+    <section class="verification-section hidden" id="verification-section">
+      <h2>Verificación de cuenta</h2>
+      <div class="verification-grid">
+        <article class="verification-method">
+          <h3>Correo electrónico</h3>
+          <p>Modo demostración: en producción se enviaría un código OTP al correo registrado.</p>
+          <button class="button" id="email-request" type="button">Verificar correo</button>
+          <div class="demo-code" id="email-demo-code" role="status" hidden></div>
+          <form class="code-form" id="email-confirm" hidden>
+            <label for="email-code">Ingrese el código</label>
+            <input id="email-code" name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required />
+            <button class="button" type="submit">Verificar</button>
+          </form>
+        </article>
+        <article class="verification-method">
+          <h3>Teléfono</h3>
+          <p>Modo demostración: en producción se enviaría un código OTP por SMS al teléfono registrado.</p>
+          <form id="phone-form" hidden>
+            <label for="profile-phone">Teléfono internacional</label>
+            <input id="profile-phone" name="phone" type="tel" autocomplete="tel" placeholder="+573001234567" pattern="[+][1-9][0-9]{7,14}" required />
+            <button class="button" type="submit">Guardar teléfono</button>
+          </form>
+          <button class="button" id="phone-request" type="button">Verificar teléfono</button>
+          <div class="demo-code" id="phone-demo-code" role="status" hidden></div>
+          <form class="code-form" id="phone-confirm" hidden>
+            <label for="phone-code">Ingrese el código</label>
+            <input id="phone-code" name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required />
+            <button class="button" type="submit">Verificar</button>
+          </form>
+        </article>
+      </div>
+      <button class="button artist-request" id="artist-request" type="button" hidden>Solicitar rol de artista</button>
+      <p class="verification-status" id="verification-status" role="status" aria-live="polite"></p>
+    </section>
   </section>
 </MainLayout>
 
@@ -15,46 +49,132 @@ import MainLayout from '../layouts/MainLayout.astro';
   import { getCurrentUser } from '../scripts/auth.js';
 
   const profileContent = document.querySelector('#profile-content');
-
-  const addField = (list, label, value) => {
-    const row = document.createElement('div');
-    const term = document.createElement('dt');
-    const description = document.createElement('dd');
-    term.textContent = label;
-    description.textContent = value;
-    row.append(term, description);
-    list.append(row);
+  const verificationSection = document.querySelector('#verification-section');
+  const verificationStatus = document.querySelector('#verification-status');
+  const setStatus = (message, error = false) => {
+    verificationStatus.textContent = message;
+    verificationStatus.classList.toggle('error', error);
   };
+  const errorMessage = (data) => {
+    const detail = data.detail ?? data.message;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((item) => typeof item === 'string' ? item : item?.msg).filter(Boolean).join(' ');
+    }
+    if (detail && typeof detail === 'object') return detail.message || detail.msg || 'No se pudo completar la solicitud.';
+    return 'No se pudo completar la solicitud.';
+  };
+  const api = async (path, payload, method = 'POST') => {
+    const response = await fetch(`${import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env.DEV ? 'http://localhost:3000' : '')}/api/auth/${path}`, {
+      method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      ...(payload ? { body: JSON.stringify(payload) } : {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(errorMessage(data));
+    return data;
+  };
+  const renderUser = (user) => {
+    const rows = [
+      ['Usuario', user.username],
+      ['Correo', user.email || 'No registrado'],
+      ['Teléfono', user.phone || 'No registrado'],
+      ['Rol', user.role],
+      ['Correo verificado', user.email_verified ? 'Sí' : 'No'],
+      ['Teléfono verificado', user.phone_verified ? 'Sí' : 'No'],
+    ];
+    const details = document.createElement('dl');
+    details.className = 'profile-data';
+    for (const [label, value] of rows) {
+      const row = document.createElement('div');
+      const term = document.createElement('dt');
+      const description = document.createElement('dd');
+      term.textContent = label;
+      description.textContent = value;
+      row.append(term, description);
+      details.append(row);
+    }
+    profileContent.replaceChildren(details);
+    verificationSection.classList.remove('hidden');
+    document.querySelector('#email-request').hidden = user.email_verified;
+    document.querySelector('#email-confirm').hidden = user.email_verified;
+    document.querySelector('#phone-form').hidden = Boolean(user.phone);
+    document.querySelector('#phone-request').hidden = !user.phone || user.phone_verified;
+    document.querySelector('#phone-confirm').hidden = !user.phone || user.phone_verified;
+    document.querySelector('#artist-request').hidden = user.role !== 'VISITANTE' || !user.email_verified || !user.phone_verified;
+  };
+  const showDemoCode = (kind, result) => {
+    const panel = document.querySelector(`#${kind}-demo-code`);
+    if (!result.demo_code) {
+      setStatus(result.message || 'La verificación ya está completada.');
+      return;
+    }
+    panel.textContent = `Código OTP de demostración académica: ${result.demo_code}`;
+    panel.hidden = false;
+    document.querySelector(`#${kind}-confirm`).hidden = false;
+    setStatus(result.message);
+  };
+  const requestOtp = async (kind) => {
+    try {
+      const result = await api(`${kind}/verification/request`);
+      showDemoCode(kind, result);
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  };
+  const confirmOtp = (kind, form) => form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await api(`${kind}/verification/confirm`, Object.fromEntries(new FormData(form)));
+      const user = await getCurrentUser();
+      renderUser(user);
+      document.querySelector(`#${kind}-demo-code`).hidden = true;
+      setStatus(kind === 'email' ? 'Correo verificado correctamente.' : 'Teléfono verificado correctamente.');
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+
+  document.querySelector('#email-request').addEventListener('click', () => requestOtp('email'));
+  document.querySelector('#phone-request').addEventListener('click', () => requestOtp('phone'));
+  confirmOtp('email', document.querySelector('#email-confirm'));
+  confirmOtp('phone', document.querySelector('#phone-confirm'));
+  document.querySelector('#phone-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const user = await api('phone', Object.fromEntries(new FormData(event.currentTarget)), 'PUT');
+      renderUser(user.user);
+      setStatus('Teléfono guardado. Modo demostración: solicita el OTP para continuar.');
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+  document.querySelector('#artist-request').addEventListener('click', async () => {
+    try {
+      await api('artist/request');
+      setStatus('Rol de artista asignado correctamente.');
+      window.location.reload();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
 
   getCurrentUser()
     .then((user) => {
-      if (!profileContent) return;
       if (!user) {
-        profileContent.replaceChildren();
-        const message = document.createElement('p');
-        message.textContent = 'Inicia sesión para consultar tu perfil.';
-        const login = document.createElement('a');
-        login.className = 'button';
-        login.href = '/login';
-        login.textContent = 'Iniciar sesión';
-        profileContent.append(message, login);
+        profileContent.textContent = 'Inicia sesión para consultar tu perfil.';
         return;
       }
-
-      const details = document.createElement('dl');
-      details.className = 'profile-data';
-      addField(details, 'Usuario', user.username);
-      if (user.email) addField(details, 'Correo electrónico', user.email);
-      addField(details, 'Sesión', 'Activa');
-      if (user.email) addField(details, 'Estado del correo', user.email_verified ? 'Verificado' : 'Pendiente de verificación');
-      profileContent.replaceChildren(details);
+      renderUser(user);
     })
     .catch(() => {
-      if (profileContent) profileContent.textContent = 'No fue posible cargar el perfil.';
+      profileContent.textContent = 'No fue posible cargar el perfil.';
     });
 </script>
 
 <style>
+  .hidden { display: none !important; }
   .profile-page { max-width: 760px; }
   .profile-card { margin-top: 26px; }
   .profile-data { display: grid; gap: 0; margin: 0; }
@@ -62,5 +182,20 @@ import MainLayout from '../layouts/MainLayout.astro';
   .profile-data div:last-child { border-bottom: 0; }
   .profile-data dt { color: #73736f; font-size: 12px; }
   .profile-data dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 13px; }
-  @media (max-width: 480px) { .profile-data div { grid-template-columns: 1fr; gap: 5px; } }
+  .verification-section { margin-top: 40px; }
+  .verification-section h2 { margin-bottom: 18px; }
+  .verification-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .verification-method { padding: 18px; border: 1px solid #e5e3dd; border-radius: 4px; background: #fff; }
+  .verification-method h3 { margin: 0 0 8px; font-size: 16px; }
+  .verification-method p { color: #73736f; font-size: 12px; line-height: 1.6; }
+  .verification-method form { display: grid; gap: 10px; margin-top: 14px; }
+  .verification-method label { color: #555; font-size: 12px; font-weight: 600; }
+  .verification-method input { min-width: 0; max-width: 260px; padding: 10px; border: 1px solid #dcd9d1; font: inherit; }
+  .demo-code { margin-top: 14px; padding: 12px; border: 1px dashed #bd9455; background: #fbf8f0; color: #614719; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+  .demo-code[hidden], .verification-method [hidden] { display: none; }
+  .verification-status { min-height: 22px; color: #555; font-size: 13px; }
+  .verification-status.error { color: #a0473f; }
+  .artist-request { margin-top: 12px; }
+  .artist-request[hidden] { display: none; }
+  @media (max-width: 600px) { .profile-data div { grid-template-columns: 1fr; gap: 5px; } .verification-grid { grid-template-columns: 1fr; } }
 </style>

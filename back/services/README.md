@@ -72,19 +72,23 @@ repository. Sessions are opaque, stored as digests, and issued in `HttpOnly`,
 `SameSite=Strict` cookies with a 12-hour expiration. Login attempts are
 rate-limited.
 
-Configure SMTP with `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`,
-and `SMTP_FROM` to enable email verification, password recovery, and purchase
-OTPs. Docker Compose uses a local Mailpit inbox by default; open
-`http://127.0.0.1:8025/` to read test messages. Disable `SMTP_STARTTLS` only
-for trusted local SMTP servers such as Mailpit. Set a random `TOKEN_PEPPER` of
-at least 32 characters in production; Docker generates one locally. Email
-tokens are short-lived, single-use, stored as digests, and rate-limited.
-Accounts without a verified email cannot recover passwords or create purchase
-orders.
+Correo y teléfono funcionan exclusivamente en modo demostración académico. No
+hay transporte SMTP, Mailpit, SMS ni proveedor externo configurado. El backend
+genera OTP temporales de seis dígitos, muestra el código solo a la sesión que lo
+solicitó y guarda únicamente su hash; los códigos vencen, son de un solo uso,
+están limitados a cinco intentos y las solicitudes se limitan por tiempo. La
+recuperación por correo se deshabilita en este modo para no revelar un código a
+una petición anónima. Define un `TOKEN_PEPPER` aleatorio de al menos 32
+caracteres en producción; Docker genera uno localmente.
+
+El registro público ignora cualquier rol enviado y asigna `VISITANTE` en el
+servidor. Solo una cuenta con correo y teléfono verificados puede solicitar el
+rol `ARTISTA`; `WEBMASTER` se provisiona únicamente con configuración
+controlada del backend.
 
 Purchase APIs derive prices and availability from Works rather than trusting
 client-supplied prices, require an authenticated owner, use an idempotency key,
-and require an email OTP. Confirmed orders remain `pending_payment`; no
+and require an email OTP in demo mode. Confirmed orders remain `pending_payment`; no
 payment provider or card data is configured, so the application does not
 charge customers. Configure a payment provider separately before implementing
 settlement.
@@ -101,9 +105,9 @@ pip install -r back\services\requirements.txt
 ```
 
 Copy `back/.env.example` to `back/.env` and set `DATABASE_URL` to your PostgreSQL
-connection string. The database helper loads `back/.env` automatically.
-Set the SMTP variables and `ADMIN_PASSWORD` in the environment or an excluded
-local `.env` file when needed. Never commit credentials.
+connection string. The database helper loads `back/.env` automatically. Set
+`ADMIN_PASSWORD` in the environment or an excluded local `.env` file when
+needed. Never commit credentials. No SMTP settings are used in demo mode.
 
 Run a service from the repository root:
 
@@ -134,6 +138,6 @@ The Render Blueprint is in `back/render.yaml`; select that file as the Blueprint
 path in the Render dashboard. Its frontend build runs from the repository root
 and serves the generated static pages through the backend gateway. Render
 supplies `PORT` to each service. Set the
-SMTP and administrator secret values in the Render dashboard; without SMTP,
-email-dependent actions return an error instead of pretending delivery
-succeeded. `COOKIE_SECURE=true` is required for HTTPS production deployments.
+administrator secret values in the Render dashboard. El correo y SMS
+continúan en modo demostración y nunca se envían desde este proyecto.
+`COOKIE_SECURE=true` is required for HTTPS production deployments.

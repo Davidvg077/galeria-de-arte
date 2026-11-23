@@ -1,5 +1,4 @@
 import json
-import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -7,7 +6,6 @@ from decimal import Decimal
 
 from auth_client import current_user
 from db import connection
-from email_service import EmailConfigurationError, send_email
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Json
@@ -18,7 +16,6 @@ from ..models import Cart, CartItem, Checkout, CheckoutInput, ConfirmInput, Purc
 
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 def _assert_owner(requested_id: int, user: dict) -> None:
@@ -64,19 +61,6 @@ def _load_work(request: Request, work_id: int) -> dict:
     if not work.get("available") or work.get("price") is None:
         raise HTTPException(status_code=409, detail="Una obra ya no está disponible para compra.")
     return work
-
-
-def _send_purchase_code(email: str, code: str) -> None:
-    try:
-        send_email(
-            email,
-            "Confirma tu pedido GART Gallery",
-            f"Tu código de confirmación es {code}. Vence en 10 minutos. "
-            "El pedido quedará pendiente de pago; este paso no realiza ningún cobro.",
-        )
-    except EmailConfigurationError as error:
-        logger.error("Purchase email delivery failed: %s", error)
-        raise HTTPException(status_code=503, detail="El servicio de correo no está disponible.") from error
 
 
 @router.get("/cart/{user_id}", response_model=Cart)
@@ -190,17 +174,13 @@ def create_checkout(
                 expires_at=existing["expires_at"],
             )
         raise HTTPException(status_code=409, detail="La clave de operación ya fue utilizada.")
-    try:
-        _send_purchase_code(user["email"], code)
-    except HTTPException:
-        with connection() as db:
-            db.execute("DELETE FROM purchase_checkouts WHERE id = %s", (checkout_id,))
-        raise
     return Checkout(
         id=checkout_id,
         total=float(total),
         status="pending_confirmation",
         expires_at=row["expires_at"],
+        demo_mode=True,
+        demo_code=code,
     )
 
 
@@ -218,7 +198,7 @@ def create_purchase_compatibility(
 def resend_checkout_code(
     checkout_id: str,
     user: dict = Depends(current_user),
-) -> dict[str, bool]:
+) -> dict[str, bool | str]:
     if not user.get("email_verified") or not user.get("email"):
         raise HTTPException(status_code=403, detail="Verifica tu correo antes de iniciar una compra.")
     code = f"{secrets.randbelow(1_000_000):06d}"
@@ -246,13 +226,12 @@ def resend_checkout_code(
             """,
             (checkout_id, hash_one_time_code(code)),
         )
-    try:
-        _send_purchase_code(user["email"], code)
-    except HTTPException:
-        with connection() as db:
-            db.execute("DELETE FROM purchase_checkout_codes WHERE checkout_id = %s", (checkout_id,))
-        raise
-    return {"ok": True}
+    return {
+        "ok": True,
+        "mode": "demo",
+        "message": "Modo demostración: no se envió ningún correo.",
+        "demo_code": code,
+    }
 
 
 @router.post("/purchases/{checkout_id}/confirm", response_model=Purchase)

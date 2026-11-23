@@ -13,7 +13,8 @@ import MainLayout from '../layouts/MainLayout.astro';
     </div>
     <form id="confirmation-form" class="card confirmation-form hidden">
       <h2>Confirma tu identidad</h2>
-      <p>Ingresa el código enviado a tu correo. Tu pedido quedará pendiente de pago; no se realizará ningún cobro.</p>
+      <p>Modo demostración: no se envió ningún correo. En producción se enviaría un código OTP al correo registrado. Tu pedido quedará pendiente de pago; no se realizará ningún cobro.</p>
+      <div id="demo-code-panel" class="demo-code" role="status" hidden></div>
       <label for="checkout-code">Código de seis dígitos</label>
       <input id="checkout-code" name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required />
       <button class="button" type="submit">Confirmar pedido</button>
@@ -35,6 +36,8 @@ import MainLayout from '../layouts/MainLayout.astro';
   .cart-summary p, .confirmation-form p { color: #73736f; font-size: 13px; line-height: 1.6; }
   .confirmation-form { display: grid; justify-items: start; gap: 12px; max-width: 520px; margin-top: 22px; }
   .confirmation-form h2, .confirmation-form p { margin: 0; }
+  .demo-code { padding: 12px 14px; border: 1px dashed #bd9455; background: #fbf8f0; color: #614719; font-size: 13px; font-weight: 700; }
+  .demo-code[hidden] { display: none; }
   .confirmation-form input { width: 100%; max-width: 260px; padding: 12px; border: 1px solid #dcd9d1; font: inherit; }
   .cart-status { min-height: 24px; color: #555; }
   .cart-status.error { color: #a0473f; }
@@ -49,6 +52,7 @@ import MainLayout from '../layouts/MainLayout.astro';
   const confirmationForm = document.querySelector('#confirmation-form');
   const status = document.querySelector('#cart-status');
   const checkoutButton = document.querySelector('#checkout-button');
+  const demoCodePanel = document.querySelector('#demo-code-panel');
   let checkoutId = null;
   let checkoutItems = [];
 
@@ -73,9 +77,21 @@ import MainLayout from '../layouts/MainLayout.astro';
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status === 401) window.location.assign('/login');
-      throw new Error(data.detail || 'No se pudo completar la compra.');
+      const detail = data.detail;
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((item) => item?.msg).filter(Boolean).join(' ')
+          : detail && typeof detail === 'object'
+            ? detail.message || detail.msg || 'No se pudo completar la compra.'
+            : typeof data.message === 'string' ? data.message : 'No se pudo completar la compra.';
+      throw new Error(message);
     }
     return data;
+  };
+  const showDemoCode = (code) => {
+    demoCodePanel.textContent = `Código OTP de demostración académica: ${code}`;
+    demoCodePanel.hidden = false;
   };
   const money = (value) => value == null ? 'Consultar precio' : `$ ${Number(value).toLocaleString('es-CO')}`;
   const safeImageUrl = (value) => {
@@ -165,7 +181,8 @@ import MainLayout from '../layouts/MainLayout.astro';
       });
       checkoutId = checkout.id;
       confirmationForm.classList.remove('hidden');
-      showStatus(`Código enviado. Total validado por el servidor: ${money(checkout.total)}.`);
+      showDemoCode(checkout.demo_code);
+      showStatus(`Modo demostración: el código se generó localmente. Total validado por el servidor: ${money(checkout.total)}.`);
     } catch (error) {
       showStatus(error.message, true);
     } finally {
@@ -198,8 +215,9 @@ import MainLayout from '../layouts/MainLayout.astro';
   document.querySelector('#resend-code').addEventListener('click', async () => {
     if (!checkoutId) return;
     try {
-      await api(`/api/purchases/${encodeURIComponent(checkoutId)}/code`, { method: 'POST' });
-      showStatus('Te enviamos un nuevo código de confirmación.');
+      const response = await api(`/api/purchases/${encodeURIComponent(checkoutId)}/code`, { method: 'POST' });
+      showDemoCode(response.demo_code);
+      showStatus('Modo demostración: se generó un nuevo código; no se envió ningún correo.');
     } catch (error) {
       showStatus(error.message, true);
     }

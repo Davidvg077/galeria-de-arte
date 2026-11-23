@@ -20,8 +20,12 @@ def init_db() -> None:
             """
         )
         db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS email TEXT")
+        db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS phone TEXT")
         db.execute(
             "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+        db.execute(
+            "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT FALSE"
         )
         db.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS auth_users_email_lower_idx "
@@ -89,6 +93,13 @@ def init_db() -> None:
             )
             """
         )
+        db.execute(
+            "ALTER TABLE auth_email_tokens DROP CONSTRAINT IF EXISTS auth_email_tokens_purpose_check"
+        )
+        db.execute(
+            "ALTER TABLE auth_email_tokens ADD CONSTRAINT auth_email_tokens_purpose_check "
+            "CHECK (purpose IN ('verify_email', 'verify_phone', 'reset_password'))"
+        )
 
         for row in db.execute("SELECT id, username, password FROM auth_users").fetchall():
             if not row["password"].startswith("pbkdf2_sha256$"):
@@ -122,11 +133,20 @@ def user_from_row(row: dict) -> dict:
         "id": row["id"],
         "username": row["username"],
         "email": row["email"],
+        "phone": _mask_phone(row.get("phone")),
         "email_verified": row["email_verified"],
+        "phone_verified": row.get("phone_verified", False),
         "role": row["role"],
         "permissions": row["permissions"],
         "active": row["active"],
     }
+
+
+def _mask_phone(phone: str | None) -> str | None:
+    if not phone:
+        return None
+    prefix_length = min(3 if phone.startswith("+57") else 1, len(phone) - 1)
+    return f"{phone[:prefix_length]} {'*' * (len(phone) - prefix_length)}"
 
 
 def create_email_token(db, user_id: int, purpose: str, token_hash: str) -> None:
