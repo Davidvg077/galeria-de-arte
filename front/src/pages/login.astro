@@ -117,12 +117,7 @@ const apiGatewayUrl = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env
     event.preventDefault();
     try {
       const data = await api('login', Object.fromEntries(new FormData(loginForm)));
-      if (data.user.email_verified && data.user.phone_verified) {
-        window.location.assign(data.user.role === 'WEBMASTER' ? '/dashboard' : data.user.role === 'ARTISTA' ? '/artist/dashboard' : '/');
-      } else {
-        showForm(loginForm);
-        showStatus('Sesión iniciada. Completa las verificaciones desde Mi perfil.');
-      }
+      window.location.assign('/');
     } catch (error) {
       showStatus(error.message, true);
     }
