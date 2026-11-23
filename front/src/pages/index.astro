@@ -23,12 +23,17 @@ const galleries = [
   </head>
   <body>
     <header class="site-header">
+      <button class="mobile-menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="mobile-navigation">☰</button>
       <a class="brand" href="/">
         <span class="brand-mark">G</span>
         <span>GART<br /><b>GALLERY</b></span>
       </a>
-      <nav aria-label="Navegación principal">
+      <nav class="desktop-nav" aria-label="Navegación principal">
         <a class="active" href="/">Inicio</a><a href="/galleries">Galerías</a><a href="/artists">Artistas</a><a href="/works">Obras</a><a href="/about">Sobre nosotros</a><a href="/contact">Contacto</a>
+      </nav>
+      <nav class="mobile-nav" id="mobile-navigation" aria-label="Navegación móvil" hidden>
+        <button class="mobile-menu-close" type="button" aria-label="Cerrar menú">×</button>
+        <a href="/">Inicio</a><a href="/galleries">Galerías</a><a href="/artists">Artistas</a><a href="/works">Obras</a><a href="/about">Sobre nosotros</a><a href="/contact">Contacto</a>
       </nav>
       <div class="header-actions"><a class="icon-link" href="/works?q=" aria-label="Buscar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" fill="none" stroke="currentColor" stroke-width="1.8" /><path d="m16 16 4.2 4.2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8" /></svg></a><a class="icon-link" href="/favorites" aria-label="Favoritos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" /></svg></a><a class="icon-link" href="/cart" aria-label="Carrito"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.3 11.1a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L22 9H6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" /><circle cx="10" cy="20" r="1" fill="currentColor" /><circle cx="18" cy="20" r="1" fill="currentColor" /></svg></a><a class="login" href="/login" data-auth-link>Iniciar sesión</a><a class="dashboard-link" href="/artist/dashboard" data-dashboard-link hidden>Mi espacio</a></div>
     </header>
@@ -76,8 +81,10 @@ const galleries = [
 
 <script>
   import { initializeAuthNavigation } from '../scripts/auth.js';
+  import { initializeMobileNavigation } from '../scripts/mobile-navigation.js';
 
   initializeAuthNavigation();
+  initializeMobileNavigation();
   document.addEventListener('error', (event) => {
     const image = event.target;
     if (image instanceof HTMLImageElement && !image.src.endsWith('/images/artwork-fallback.svg')) {
@@ -96,8 +103,9 @@ const galleries = [
   .brand { display: flex; align-items: center; gap: 9px; font-size: 10px; line-height: .95; letter-spacing: .7px; font-weight: 600; }
   .brand b { font-weight: 700; letter-spacing: 1.2px; }
   .brand-mark { border: 1px solid #2a2a2a; width: 25px; height: 31px; display: grid; place-items: center; font-family: 'Playfair Display', serif; font-size: 17px; }
-  nav { display: flex; align-items: center; gap: clamp(13px, 2vw, 29px); font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #51514f; }
-  nav a { padding: 30px 0 27px; border-bottom: 2px solid transparent; } nav a:hover, nav a.active { color: #111; border-color: #b28a48; }
+  .desktop-nav { display: flex; align-items: center; gap: clamp(13px, 2vw, 29px); font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #51514f; }
+  .desktop-nav a { padding: 30px 0 27px; border-bottom: 2px solid transparent; } .desktop-nav a:hover, .desktop-nav a.active { color: #111; border-color: #b28a48; }
+  .mobile-menu-toggle, .mobile-nav { display: none; }
   .header-actions { display: flex; align-items: center; gap: 13px; } .header-actions a { color: #333; cursor: pointer; font-size: 17px; padding: 3px; } .header-actions .icon-link { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; } .header-actions .icon-link svg { display: block; width: 20px; height: 20px; } .header-actions .login { background: #242424; color: #fff; padding: 10px 15px; border-radius: 3px; font-size: 10px; } .header-actions .dashboard-link { color: #80602e; font-size: 10px; font-weight: 700; }
   .hero { max-width: 1400px; margin: 22px auto 0; min-height: 470px; padding: clamp(44px, 6vw, 78px) clamp(32px, 7vw, 100px); display: grid; grid-template-columns: .92fr 1.08fr; background: #222321; color: #fff; border-radius: 8px; overflow: hidden; }
   .hero-copy { min-width: 0; z-index: 1; } .eyebrow { color: #76511d; font-size: 11px; font-weight: 700; letter-spacing: 1.8px; line-height: 1.4; margin: 0 0 14px; } .hero .eyebrow { color: #e1bb79; } h1 { font-family: 'Playfair Display', serif; font-size: clamp(2.5rem, 4vw, 4.1rem); line-height: .98; font-weight: 500; margin: 0 0 22px; } h1 em { color: #f4f2ed; font-style: italic; } .hero-text { color: #c4c4c0; line-height: 1.5; font-size: 13px; margin-bottom: 27px; }
@@ -108,7 +116,7 @@ const galleries = [
   .works-section { padding-top: 48px; padding-bottom: 52px; } .work-image { aspect-ratio: 4 / 3; position: relative; background: #ddd; overflow: hidden; } .work-image button { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; background: #fffffff0; color: #282828; border: 0; border-radius: 50%; width: 34px; height: 34px; cursor: pointer; transition: background .2s, transform .2s; } .work-image button svg { display: block; width: 20px; height: 20px; } .work-image button:hover { background: #be9655; color: #fff; transform: scale(1.06); } .work-content strong { font-size: 12px; font-weight: 700; color: #262626; }
   .trust-bar { max-width: 1272px; margin: 0 auto 48px; padding: 18px 24px; background: #252525; color: #fff; display: grid; grid-template-columns: repeat(4, 1fr); border-radius: 4px; } .trust-bar div { display: grid; grid-template-columns: 25px 1fr; column-gap: 9px; align-items: center; border-right: 1px solid #ffffff1f; padding: 0 17px; } .trust-bar div:last-child { border: 0; } .trust-bar span { grid-row: span 2; color: #c29959; font-size: 20px; } .trust-bar b { font-size: 10px; } .trust-bar small { color: #a7a7a5; font-size: 8px; margin-top: 4px; }
   footer { border-top: 1px solid #e1dfd9; background: #fff; padding: 29px clamp(22px, 4vw, 64px); display: flex; align-items: center; gap: 40px; color: #777; font-size: 10px; } footer .brand { color: #222; } footer p { flex: 1; } .footer-links { display: flex; gap: 20px; } footer small { color: #aaa; }
-  @media (max-width: 800px) { .site-header { height: auto; padding-top: 15px; padding-bottom: 15px; flex-wrap: wrap; } nav { order: 3; width: 100%; overflow-x: auto; justify-content: space-between; } nav a { padding: 9px 0 5px; white-space: nowrap; } .hero { grid-template-columns: 1fr; margin: 12px 12px 0; padding: 40px 26px 0; } .hero-art { min-height: 270px; margin: 35px -26px 0; } .gallery-grid, .works-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .trust-bar { grid-template-columns: repeat(2, 1fr); margin: 0 22px 35px; gap: 18px 0; } .trust-bar div:nth-child(2) { border-right: 0; } footer { flex-wrap: wrap; gap: 15px; } footer p { flex-basis: 100%; order: 3; } }
+  @media (max-width: 800px) { .site-header { height: auto; min-height: 68px; padding: 12px 18px; gap: 14px; flex-wrap: nowrap; } .mobile-menu-toggle { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; padding: 0; border: 1px solid #e7e5df; border-radius: 3px; background: #fff; color: #242424; font-size: 20px; line-height: 1; cursor: pointer; } .desktop-nav { display: none; } .mobile-nav:not([hidden]) { position: absolute; top: calc(100% + 8px); left: 12px; z-index: 5; display: flex; flex-direction: column; width: min(70vw, 280px); padding: 12px; border: 1px solid #e7e5df; border-radius: 4px; background: #fff; box-shadow: 0 12px 28px #1f1f1f20; color: #51514f; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; } .mobile-nav a { padding: 12px 8px; border-bottom: 1px solid #efeee9; } .mobile-nav a:last-child { border-bottom: 0; } .mobile-menu-close { align-self: flex-end; width: 32px; height: 32px; border: 0; background: transparent; color: #242424; font-size: 24px; line-height: 1; cursor: pointer; } .header-actions { margin-left: auto; } .hero { grid-template-columns: 1fr; margin: 12px 12px 0; padding: 40px 26px 0; } .hero-art { min-height: 270px; margin: 35px -26px 0; } .gallery-grid, .works-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .trust-bar { grid-template-columns: repeat(2, 1fr); margin: 0 22px 35px; gap: 18px 0; } .trust-bar div:nth-child(2) { border-right: 0; } footer { flex-wrap: wrap; gap: 15px; } footer p { flex-basis: 100%; order: 3; } }
   @media (max-width: 480px) { .header-actions a:not(.login):not(.dashboard-link) { display: none; } .header-actions .login { padding: 8px 10px; } .gallery-grid, .works-grid { grid-template-columns: 1fr; gap: 12px; } .card-image, .work-image { aspect-ratio: 16 / 10; } .trust-bar { grid-template-columns: 1fr; } .trust-bar div { border-right: 0; } h2 { font-size: 21px; } }
 </style>
 
