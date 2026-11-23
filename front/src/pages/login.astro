@@ -25,36 +25,17 @@ const apiGatewayUrl = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env
         <form id="register-form" class="auth-form hidden">
           <label>Usuario<input name="username" autocomplete="username" minlength="3" maxlength="50" required /></label>
           <label>Correo electrónico<input name="email" type="email" autocomplete="email" maxlength="254" required /></label>
+          <label>Teléfono internacional<input name="phone" type="tel" autocomplete="tel" placeholder="+573001234567" pattern="[+][1-9][0-9]{7,14}" required /></label>
           <label>Contraseña<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required /></label>
-          <label>Tipo de cuenta<select name="role"><option value="VISITANTE">Visitante · explorar y comprar</option><option value="ARTISTA">Artista · gestionar y publicar obras</option></select></label>
+          <label>Confirmar contraseña<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required /></label>
           <button class="button" type="submit">Crear cuenta</button>
         </form>
         <form id="forgot-form" class="auth-form hidden">
-          <p>Si el correo está registrado y verificado, recibirás un código de recuperación.</p>
+          <p>Modo demostración: la recuperación por correo está deshabilitada y no se envían mensajes.</p>
           <label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="254" /></label>
-          <button class="button" type="submit">Enviar código</button>
+          <button class="button" type="submit">Consultar recuperación</button>
           <button class="text-button" type="button" data-back-login>Volver a iniciar sesión</button>
         </form>
-        <form id="reset-form" class="auth-form hidden">
-          <label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="254" /></label>
-          <label>Código recibido<input name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required /></label>
-          <label>Nueva contraseña<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required /></label>
-          <button class="button" type="submit">Cambiar contraseña</button>
-          <button class="text-button" type="button" id="resend-reset">Solicitar otro código</button>
-        </form>
-        <section id="verify-panel" class="auth-form hidden" aria-labelledby="verify-title">
-          <h2 id="verify-title">Verifica tu correo</h2>
-          <p>Necesitas un correo verificado para recuperar el acceso o confirmar compras.</p>
-          <form id="email-form" class="auth-form hidden">
-            <label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="254" /></label>
-            <button class="button" type="submit">Guardar correo</button>
-          </form>
-          <button class="button" type="button" id="send-verification">Enviar código de verificación</button>
-          <form id="verify-form" class="auth-form hidden">
-            <label>Código recibido<input name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required /></label>
-            <button class="button" type="submit">Verificar correo</button>
-          </form>
-        </section>
         <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
       </div>
     </div>
@@ -79,9 +60,7 @@ const apiGatewayUrl = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env
   .auth-status { min-height: 22px; color: #555; font-size: 12px; line-height: 1.5; }
   .auth-status.error { color: #a0473f; }
   .hidden { display: none !important; }
-  #verify-panel { border-top: 1px solid #e5e3dd; margin-top: 20px; padding-top: 18px; }
-  #verify-panel h2 { margin: 0; font-size: 20px; }
-  #verify-panel p, #forgot-form p { color: #73736f; font-size: 13px; line-height: 1.6; }
+  #forgot-form p { color: #73736f; font-size: 13px; line-height: 1.6; }
   @media (max-width: 800px) { .auth-shell { grid-template-columns: 1fr; gap: 25px; } .auth-card { max-width: 520px; width: 100%; } }
 </style>
 
@@ -89,20 +68,24 @@ const apiGatewayUrl = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env
   const loginForm = document.querySelector('#login-form');
   const registerForm = document.querySelector('#register-form');
   const forgotForm = document.querySelector('#forgot-form');
-  const resetForm = document.querySelector('#reset-form');
-  const verifyPanel = document.querySelector('#verify-panel');
-  const emailForm = document.querySelector('#email-form');
-  const verifyForm = document.querySelector('#verify-form');
   const status = document.querySelector('#auth-status');
   const tabs = document.querySelectorAll('.tab');
-  let currentUser = null;
 
   const showStatus = (message, error = false) => {
     status.textContent = message;
     status.classList.toggle('error', error);
   };
-  const forms = [loginForm, registerForm, forgotForm, resetForm];
+  const forms = [loginForm, registerForm, forgotForm];
   const showForm = (form) => forms.forEach((item) => item.classList.toggle('hidden', item !== form));
+  const errorMessage = (data) => {
+    const detail = data.detail ?? data.message;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((item) => (typeof item === 'string' ? item : item?.msg)?.replace(/^Value error,\s*/, '')).filter(Boolean).join(' ');
+    }
+    if (detail && typeof detail === 'object') return detail.message || detail.msg || 'No se pudo completar la solicitud.';
+    return 'No se pudo completar la solicitud.';
+  };
   const api = async (path, payload, method = 'POST') => {
     const response = await fetch(`${apiGatewayUrl}/api/auth/${path}`, {
       method,
@@ -111,15 +94,8 @@ const apiGatewayUrl = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env
       ...(payload ? { body: JSON.stringify(payload) } : {}),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail || 'No se pudo completar la solicitud.');
+    if (!response.ok) throw new Error(errorMessage(data));
     return data;
-  };
-  const startSession = (user) => {
-    currentUser = user;
-    verifyPanel.classList.toggle('hidden', user.email_verified);
-    emailForm.classList.toggle('hidden', Boolean(user.email));
-    document.querySelector('#send-verification').classList.toggle('hidden', !user.email || user.email_verified);
-    if (user.email_verified) verifyForm.classList.add('hidden');
   };
 
   tabs.forEach((tab) => tab.addEventListener('click', () => {
@@ -141,12 +117,11 @@ const apiGatewayUrl = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env
     event.preventDefault();
     try {
       const data = await api('login', Object.fromEntries(new FormData(loginForm)));
-      startSession(data.user);
-      if (data.user.email_verified) {
+      if (data.user.email_verified && data.user.phone_verified) {
         window.location.assign(data.user.role === 'WEBMASTER' ? '/dashboard' : data.user.role === 'ARTISTA' ? '/artist/dashboard' : '/');
       } else {
         showForm(loginForm);
-        showStatus('Sesión iniciada. Verifica tu correo para recuperar la cuenta y confirmar compras.');
+        showStatus('Sesión iniciada. Completa las verificaciones desde Mi perfil.');
       }
     } catch (error) {
       showStatus(error.message, true);
@@ -155,21 +130,13 @@ const apiGatewayUrl = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env
 
   registerForm.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (registerForm.elements.password.value !== registerForm.elements.confirm_password.value) {
+      showStatus('Las contraseñas no coinciden.', true);
+      return;
+    }
     try {
       const data = await api('register', Object.fromEntries(new FormData(registerForm)));
-      startSession(data.user);
-      showForm(loginForm);
-      tabs.forEach((item) => item.classList.toggle('active', item.dataset.tab === 'login'));
-      showStatus('Cuenta creada. Verifica tu correo para recuperar el acceso y confirmar compras.');
-      if (data.user.email) {
-        try {
-          await api('email/verification/request');
-          verifyForm.classList.remove('hidden');
-          showStatus('Te enviamos un código para verificar tu correo.');
-        } catch (error) {
-          showStatus(`Cuenta creada, pero no se pudo enviar el código: ${error.message}`, true);
-        }
-      }
+      window.location.assign('/');
     } catch (error) {
       showStatus(error.message, true);
     }
@@ -179,76 +146,17 @@ const apiGatewayUrl = import.meta.env.PUBLIC_API_GATEWAY_URL || (import.meta.env
     event.preventDefault();
     const email = new FormData(forgotForm).get('email');
     try {
-      await api('password/forgot', { email });
-      resetForm.elements.email.value = email;
-      showForm(resetForm);
-      showStatus('Si el correo está registrado y verificado, recibirás un código.');
+      const result = await api('password/forgot', { email });
+      showStatus(result.message || 'Modo demostración: no se envió ningún correo.');
     } catch (error) {
       showStatus(error.message, true);
     }
   });
-  document.querySelector('#resend-reset').addEventListener('click', async () => {
-    try {
-      await api('password/forgot', { email: resetForm.elements.email.value });
-      showStatus('Si el correo está registrado y verificado, recibirás un nuevo código.');
-    } catch (error) {
-      showStatus(error.message, true);
-    }
-  });
-  resetForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try {
-      await api('password/reset', Object.fromEntries(new FormData(resetForm)));
-      showForm(loginForm);
-      resetForm.reset();
-      showStatus('Contraseña actualizada. Ya puedes iniciar sesión.');
-    } catch (error) {
-      showStatus(error.message, true);
-    }
-  });
-
-  emailForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try {
-      await api('email', Object.fromEntries(new FormData(emailForm)), 'PUT');
-      currentUser.email = emailForm.elements.email.value;
-      emailForm.classList.add('hidden');
-      document.querySelector('#send-verification').classList.remove('hidden');
-      showStatus('Correo guardado. Solicita un código para verificarlo.');
-    } catch (error) {
-      showStatus(error.message, true);
-    }
-  });
-  document.querySelector('#send-verification').addEventListener('click', async () => {
-    try {
-      await api('email/verification/request');
-      verifyForm.classList.remove('hidden');
-      showStatus('Te enviamos un código de verificación.');
-    } catch (error) {
-      showStatus(error.message, true);
-    }
-  });
-  verifyForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try {
-      await api('email/verification/confirm', Object.fromEntries(new FormData(verifyForm)));
-      verifyPanel.classList.add('hidden');
-      showStatus('Correo verificado correctamente.');
-      if (currentUser?.role === 'WEBMASTER') window.location.assign('/dashboard');
-      if (currentUser?.role === 'ARTISTA') window.location.assign('/artist/dashboard');
-    } catch (error) {
-      showStatus(error.message, true);
-    }
-  });
-
   fetch(`${apiGatewayUrl}/api/auth/me`, { credentials: 'include' })
     .then(async (response) => {
       if (response.status === 401) return null;
       if (!response.ok) throw new Error(`No se pudo validar la sesión (${response.status}).`);
       return response.json();
-    })
-    .then((session) => {
-      if (session?.user) startSession(session.user);
     })
     .catch((error) => console.error('No se pudo validar la sesión.', error));
 </script>

@@ -74,16 +74,6 @@ services:
         sync: false
       - key: TOKEN_PEPPER
         sync: false
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        value: "587"
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: SMTP_FROM
-        sync: false
 
   - type: web
     name: gart-gallery-purchase-v2
@@ -103,16 +93,6 @@ services:
       - key: WORKS_SERVICE_URL
         value: https://gart-gallery-works-v2.onrender.com
       - key: TOKEN_PEPPER
-        sync: false
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        value: "587"
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: SMTP_FROM
         sync: false
 
   - type: web

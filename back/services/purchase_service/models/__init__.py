@@ -44,3 +44,5 @@ class Checkout(BaseModel):
     total: float
     status: str
     expires_at: datetime
+    demo_mode: bool = True
+    demo_code: str | None = None

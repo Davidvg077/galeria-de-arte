@@ -79,14 +79,6 @@ services:
     networks:
       - app
 
-  mailpit:
-    image: axllent/mailpit:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8025:8025"
-    networks:
-      - app
-
   works-service:
     image: gart-gallery-works:local
     build:
@@ -162,18 +154,9 @@ services:
       TOKEN_PEPPER: ${TOKEN_PEPPER:?Run back/scripts/deploy-compose.ps1 to create the local token pepper}
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-      SMTP_HOST: ${SMTP_HOST:-mailpit}
-      SMTP_PORT: ${SMTP_PORT:-1025}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-GART Gallery <no-reply@gart-gallery.local>}
-      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
-      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
     depends_on:
       postgres:
         condition: service_healthy
-      mailpit:
-        condition: service_started
     ports:
       - "127.0.0.1:3003:3003"
     healthcheck:
@@ -205,13 +188,6 @@ services:
       TOKEN_PEPPER: ${TOKEN_PEPPER:?Run back/scripts/deploy-compose.ps1 to create the local token pepper}
       AUTH_SERVICE_URL: http://auth-service:3003
       WORKS_SERVICE_URL: http://works-service:3002
-      SMTP_HOST: ${SMTP_HOST:-mailpit}
-      SMTP_PORT: ${SMTP_PORT:-1025}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-GART Gallery <no-reply@gart-gallery.local>}
-      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
-      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -219,8 +195,6 @@ services:
         condition: service_healthy
       works-service:
         condition: service_healthy
-      mailpit:
-        condition: service_started
     ports:
       - "127.0.0.1:3004:3004"
     healthcheck:

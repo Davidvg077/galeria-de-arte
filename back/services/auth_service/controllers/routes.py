@@ -1,20 +1,17 @@
-import logging
 import os
 import secrets
 from datetime import timedelta
 
 from db import connection
-from email_service import EmailConfigurationError, send_email
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Json
 from security import hash_one_time_code, hash_password, hash_token, validate_request_origin, verify_password
 
-from ..models import AuthResponse, CodeInput, EmailInput, LoginRequest, RegisterRequest, ResetPasswordInput
+from ..models import AuthResponse, CodeInput, EmailInput, LoginRequest, PhoneInput, RegisterRequest, ResetPasswordInput
 from ..models.repository import create_email_token, user_from_row
 
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 SESSION_COOKIE = "gart_session"
 SESSION_HOURS = 12
@@ -70,19 +67,6 @@ def _new_email_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-def _send_code(email: str, subject: str, code: str, purpose: str) -> None:
-    try:
-        send_email(
-            email,
-            subject,
-            f"Tu código GART Gallery para {purpose} es {code}. "
-            "Vence en 10 minutos. Si no solicitaste esta acción, ignora este correo.",
-        )
-    except EmailConfigurationError as error:
-        logger.error("Email delivery unavailable: %s", error)
-        raise HTTPException(status_code=503, detail="El servicio de correo no está disponible.") from error
-
-
 def _verify_code(db, user_id: int, purpose: str, code: str) -> bool:
     row = db.execute(
         """
@@ -105,7 +89,7 @@ def _verify_code(db, user_id: int, purpose: str, code: str) -> bool:
     return True
 
 
-def _issue_code(user_id: int, email: str, purpose: str, subject: str) -> None:
+def _issue_demo_code(user_id: int, purpose: str, message: str) -> dict[str, bool | str]:
     code = _new_email_code()
     with connection() as db:
         latest = db.execute(
@@ -126,15 +110,7 @@ def _issue_code(user_id: int, email: str, purpose: str, subject: str) -> None:
             (user_id, purpose),
         )
         create_email_token(db, user_id, purpose, hash_one_time_code(code))
-    try:
-        _send_code(email, subject, code, purpose)
-    except HTTPException:
-        with connection() as db:
-            db.execute(
-                "DELETE FROM auth_email_tokens WHERE user_id = %s AND purpose = %s AND token_hash = %s",
-                (user_id, purpose, hash_one_time_code(code)),
-            )
-        raise
+    return {"ok": True, "mode": "demo", "message": message, "demo_code": code}
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -201,18 +177,17 @@ def login(payload: LoginRequest, request: Request, response: Response) -> dict:
 def register(payload: RegisterRequest, request: Request, response: Response) -> dict:
     validate_request_origin(request)
     permissions = ["works:read", "galleries:read", "content:read"]
-    if payload.role == "ARTISTA":
-        permissions.append("works:submit")
+    role = "VISITANTE"
     try:
         with connection() as db:
             cursor = db.execute(
                 """
-                INSERT INTO auth_users (username, email, password, role, permissions, active, email_verified)
-                VALUES (%s, %s, %s, %s, %s, TRUE, FALSE) RETURNING *
+                INSERT INTO auth_users (username, email, phone, password, role, permissions, active, email_verified, phone_verified)
+                VALUES (%s, %s, %s, %s, %s, %s, TRUE, FALSE, FALSE) RETURNING *
                 """,
                 (
-                    payload.username, payload.email.strip().lower(), hash_password(payload.password),
-                    payload.role, Json(permissions),
+                    payload.username, payload.email.strip().lower(), payload.phone,
+                    hash_password(payload.password), role, Json(permissions),
                 ),
             )
             row = cursor.fetchone()
@@ -272,14 +247,33 @@ def update_email(payload: EmailInput, user: dict = Depends(current_user)) -> dic
     return {"ok": True, "email_verified": False}
 
 
+@router.put("/phone")
+def update_phone(payload: PhoneInput, user: dict = Depends(current_user)) -> dict:
+    with connection() as db:
+        row = db.execute(
+            "UPDATE auth_users SET phone = %s, phone_verified = FALSE WHERE id = %s RETURNING *",
+            (payload.phone, user["id"]),
+        ).fetchone()
+        db.execute(
+            """
+            UPDATE auth_email_tokens SET consumed_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s AND purpose = 'verify_phone' AND consumed_at IS NULL
+            """,
+            (user["id"],),
+        )
+    return {"ok": True, "user": user_from_row(row)}
+
+
 @router.post("/email/verification/request")
-def request_email_verification(user: dict = Depends(current_user)) -> dict[str, bool]:
+def request_email_verification(user: dict = Depends(current_user)) -> dict[str, bool | str]:
     if not user["email"]:
         raise HTTPException(status_code=422, detail="Agrega un correo antes de verificarlo.")
     if user["email_verified"]:
-        return {"ok": True}
-    _issue_code(user["id"], user["email"], "verify_email", "Verifica tu correo")
-    return {"ok": True}
+        return {"ok": True, "mode": "demo", "message": "El correo ya está verificado."}
+    return _issue_demo_code(
+        user["id"], "verify_email",
+        "Modo demostración: en producción se enviaría un código OTP al correo registrado.",
+    )
 
 
 @router.post("/email/verification/confirm")
@@ -291,25 +285,60 @@ def confirm_email_verification(
         if valid:
             db.execute("UPDATE auth_users SET email_verified = TRUE WHERE id = %s", (user["id"],))
     if not valid:
-        raise HTTPException(status_code=400, detail="El código no es válido o ha vencido.")
-    return {"ok": True}
+        raise HTTPException(status_code=400, detail="Código incorrecto.")
+    return {"ok": True, "email_verified": True}
+
+
+@router.post("/phone/verification/request")
+def request_phone_verification(user: dict = Depends(current_user)) -> dict[str, bool | str]:
+    if not user.get("phone"):
+        raise HTTPException(status_code=422, detail="Agrega un teléfono antes de verificarlo.")
+    if user["phone_verified"]:
+        return {"ok": True, "mode": "demo", "message": "El teléfono ya está verificado."}
+    return _issue_demo_code(
+        user["id"], "verify_phone",
+        "Modo demostración: en producción se enviaría un código OTP por SMS al teléfono registrado.",
+    )
+
+
+@router.post("/phone/verification/confirm")
+def confirm_phone_verification(
+    payload: CodeInput, user: dict = Depends(current_user)
+) -> dict[str, bool]:
+    with connection() as db:
+        valid = _verify_code(db, user["id"], "verify_phone", payload.code)
+        if valid:
+            db.execute("UPDATE auth_users SET phone_verified = TRUE WHERE id = %s", (user["id"],))
+    if not valid:
+        raise HTTPException(status_code=400, detail="Código incorrecto.")
+    return {"ok": True, "phone_verified": True}
+
+
+@router.post("/artist/request")
+def request_artist_role(user: dict = Depends(current_user)) -> dict[str, bool | dict]:
+    if user["role"] == "ARTISTA":
+        return {"ok": True, "user": user}
+    if user["role"] != "VISITANTE":
+        raise HTTPException(status_code=403, detail="Esta cuenta no puede solicitar el rol de artista.")
+    if not user["email_verified"] or not user["phone_verified"]:
+        raise HTTPException(status_code=403, detail="Verifica correo y teléfono antes de solicitar el rol de artista.")
+    permissions = sorted(set(user["permissions"]) | {"works:submit"})
+    with connection() as db:
+        row = db.execute(
+            "UPDATE auth_users SET role = 'ARTISTA', permissions = %s WHERE id = %s RETURNING *",
+            (Json(permissions), user["id"]),
+        ).fetchone()
+    return {"ok": True, "user": user_from_row(row)}
 
 
 @router.post("/password/forgot")
-def forgot_password(payload: EmailInput, request: Request) -> dict[str, bool]:
+def forgot_password(payload: EmailInput, request: Request) -> dict[str, bool | str]:
     validate_request_origin(request)
-    email = payload.email.strip().lower()
-    with connection() as db:
-        row = db.execute(
-            "SELECT id, email FROM auth_users WHERE lower(email) = %s AND email_verified = TRUE AND active = TRUE",
-            (email,),
-        ).fetchone()
-    if row:
-        try:
-            _issue_code(row["id"], row["email"], "reset_password", "Recupera tu contraseña")
-        except HTTPException as error:
-            logger.warning("Password reset email could not be processed: %s", error.detail)
-    return {"ok": True}
+    return {
+        "ok": True,
+        "mode": "demo",
+        "message": "Modo demostración: la recuperación por correo no está habilitada y no se envió ningún mensaje.",
+    }
 
 
 @router.post("/password/reset")

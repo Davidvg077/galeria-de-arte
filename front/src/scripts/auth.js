@@ -23,13 +23,36 @@ export async function logout() {
 
 export function initializeAuthNavigation() {
   const authLink = document.querySelector('[data-auth-link]');
+  const accountMenu = document.querySelector('[data-account-menu]');
+  const accountToggle = document.querySelector('.account-toggle');
+  const accountDropdown = document.querySelector('.account-dropdown');
+  const usernameLabel = document.querySelector('[data-account-username]');
+  const logoutButton = document.querySelector('[data-logout-link]');
   const dashboardLink = document.querySelector('[data-dashboard-link]');
   if (!authLink) return;
 
-  authLink.addEventListener('click', async (event) => {
-    if (authLink.textContent !== 'Cerrar sesión') return;
-    event.preventDefault();
-    authLink.setAttribute('aria-busy', 'true');
+  const setAccountMenuOpen = (open, restoreFocus = false) => {
+    if (!accountDropdown || !accountToggle) return;
+    accountDropdown.hidden = !open;
+    accountToggle.setAttribute('aria-expanded', String(open));
+    if (!open && restoreFocus) accountToggle.focus();
+  };
+
+  accountToggle?.addEventListener('click', () => {
+    setAccountMenuOpen(accountDropdown?.hidden ?? true);
+  });
+  document.addEventListener('click', (event) => {
+    if (accountMenu && !accountMenu.contains(event.target)) setAccountMenuOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && accountDropdown && !accountDropdown.hidden) {
+      setAccountMenuOpen(false, true);
+    }
+  });
+  accountDropdown?.querySelector('a')?.addEventListener('click', () => setAccountMenuOpen(false));
+
+  logoutButton?.addEventListener('click', async () => {
+    logoutButton.setAttribute('aria-busy', 'true');
     try {
       await logout();
       window.location.assign('/login');
@@ -37,16 +60,19 @@ export function initializeAuthNavigation() {
       console.error('No se pudo cerrar la sesión.', error);
       window.alert('No se pudo cerrar la sesión. Comprueba tu conexión e inténtalo de nuevo.');
     } finally {
-      authLink.removeAttribute('aria-busy');
+      logoutButton.removeAttribute('aria-busy');
     }
   });
 
   getCurrentUser()
     .then((user) => {
       if (!user) return;
-      authLink.textContent = 'Cerrar sesión';
-      authLink.href = '/login';
-      authLink.setAttribute('aria-label', `Cerrar sesión de ${user.username}`);
+      authLink.hidden = true;
+      if (accountMenu && accountToggle && usernameLabel) {
+        usernameLabel.textContent = user.username;
+        accountToggle.setAttribute('aria-label', `${user.username}, abrir menú de usuario`);
+        accountMenu.hidden = false;
+      }
       if (dashboardLink && ['ARTISTA', 'WEBMASTER'].includes(user.role)) {
         dashboardLink.href = user.role === 'WEBMASTER' ? '/dashboard' : '/artist/dashboard';
         dashboardLink.textContent = user.role === 'WEBMASTER' ? 'Administración' : 'Mi espacio';
