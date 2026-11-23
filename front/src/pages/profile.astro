@@ -1,0 +1,66 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+---
+<MainLayout title="Mi perfil">
+  <section class="page profile-page">
+    <p class="eyebrow">CUENTA</p>
+    <h1>Mi perfil</h1>
+    <div class="card profile-card" id="profile-content" aria-live="polite">
+      <p>Comprobando sesión...</p>
+    </div>
+  </section>
+</MainLayout>
+
+<script>
+  import { getCurrentUser } from '../scripts/auth.js';
+
+  const profileContent = document.querySelector('#profile-content');
+
+  const addField = (list, label, value) => {
+    const row = document.createElement('div');
+    const term = document.createElement('dt');
+    const description = document.createElement('dd');
+    term.textContent = label;
+    description.textContent = value;
+    row.append(term, description);
+    list.append(row);
+  };
+
+  getCurrentUser()
+    .then((user) => {
+      if (!profileContent) return;
+      if (!user) {
+        profileContent.replaceChildren();
+        const message = document.createElement('p');
+        message.textContent = 'Inicia sesión para consultar tu perfil.';
+        const login = document.createElement('a');
+        login.className = 'button';
+        login.href = '/login';
+        login.textContent = 'Iniciar sesión';
+        profileContent.append(message, login);
+        return;
+      }
+
+      const details = document.createElement('dl');
+      details.className = 'profile-data';
+      addField(details, 'Usuario', user.username);
+      if (user.email) addField(details, 'Correo electrónico', user.email);
+      addField(details, 'Sesión', 'Activa');
+      if (user.email) addField(details, 'Estado del correo', user.email_verified ? 'Verificado' : 'Pendiente de verificación');
+      profileContent.replaceChildren(details);
+    })
+    .catch(() => {
+      if (profileContent) profileContent.textContent = 'No fue posible cargar el perfil.';
+    });
+</script>
+
+<style>
+  .profile-page { max-width: 760px; }
+  .profile-card { margin-top: 26px; }
+  .profile-data { display: grid; gap: 0; margin: 0; }
+  .profile-data div { display: grid; grid-template-columns: minmax(140px, .4fr) 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid #efeee9; }
+  .profile-data div:last-child { border-bottom: 0; }
+  .profile-data dt { color: #73736f; font-size: 12px; }
+  .profile-data dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 13px; }
+  @media (max-width: 480px) { .profile-data div { grid-template-columns: 1fr; gap: 5px; } }
+</style>
