@@ -331,6 +331,29 @@ def request_artist_role(user: dict = Depends(current_user)) -> dict[str, bool | 
     return {"ok": True, "user": user_from_row(row)}
 
 
+@router.post("/role/toggle")
+def toggle_visitor_artist_role(user: dict = Depends(current_user)) -> dict[str, bool | dict]:
+    if user["role"] == "VISITANTE":
+        if not user["email_verified"] or not user["phone_verified"]:
+            raise HTTPException(status_code=403, detail="Verifica correo y teléfono antes de cambiar a artista.")
+        permissions = sorted(set(user["permissions"]) | {"works:submit"})
+        role = "ARTISTA"
+    elif user["role"] == "ARTISTA":
+        permissions = sorted(set(user["permissions"]) - {"works:submit"})
+        role = "VISITANTE"
+    else:
+        raise HTTPException(status_code=403, detail="Este rol no admite cambios desde el perfil.")
+
+    with connection() as db:
+        row = db.execute(
+            "UPDATE auth_users SET role = %s, permissions = %s WHERE id = %s AND active = TRUE RETURNING *",
+            (role, Json(permissions), user["id"]),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="La cuenta no está disponible.")
+    return {"ok": True, "user": user_from_row(row)}
+
+
 @router.post("/password/forgot")
 def forgot_password(payload: EmailInput, request: Request) -> dict[str, bool | str]:
     validate_request_origin(request)

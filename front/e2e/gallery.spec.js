@@ -56,6 +56,49 @@ test('Login inválido: muestra un error y permanece en login', async ({ page }) 
   await expect(page.locator('#auth-status')).toContainText('Credenciales inválidas');
 });
 
+test('Menú de cuenta: cambia el rol en escritorio y móvil', async ({ page }) => {
+  let role = 'VISITANTE';
+  const user = () => ({
+    id: 77,
+    username: 'visitante_e2e',
+    email: 'visitante@example.com',
+    email_verified: true,
+    phone_verified: true,
+    role,
+    permissions: role === 'ARTISTA' ? ['works:read', 'works:submit'] : ['works:read'],
+  });
+  await page.route('**/api/auth/me', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ authenticated: true, user: user() }),
+  }));
+  await page.route('**/api/auth/role/toggle', (route) => {
+    role = role === 'VISITANTE' ? 'ARTISTA' : 'VISITANTE';
+    return route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, user: user() }),
+    });
+  });
+
+  await page.goto('/');
+  const accountToggle = page.locator('.account-toggle');
+  await expect(accountToggle).toBeVisible();
+  await accountToggle.click();
+  await page.getByRole('menuitem', { name: 'Cambiar a artista' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Cambiar a visitante' })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Cambiar a visitante' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Cambiar a artista' })).toBeVisible();
+  await expect(page.locator('[data-account-role-status]')).toContainText('visitante');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await accountToggle.click();
+  await page.getByRole('menuitem', { name: 'Cambiar a artista' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Cambiar a visitante' })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Cambiar a visitante' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Cambiar a artista' })).toBeVisible();
+  await expect(page.locator('[data-account-role]')).toContainText('Visitante');
+});
+
 test('Menú móvil: permite acceder a las secciones principales', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');

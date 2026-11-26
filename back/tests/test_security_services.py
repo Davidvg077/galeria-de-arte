@@ -233,6 +233,62 @@ class DemoFlowTests(unittest.TestCase):
         self.assertIn("works:submit", result["user"]["permissions"])
         self.assertIn("SET role = 'ARTISTA'", db.execute.call_args.args[0])
 
+    def test_role_toggle_updates_permissions_in_both_directions(self):
+        cases = (
+            ("VISITANTE", "ARTISTA", ["works:read"], True, True, ["works:read", "works:submit"]),
+            ("ARTISTA", "VISITANTE", ["works:read", "works:submit"], True, True, ["works:read"]),
+        )
+        for current_role, expected_role, permissions, email_verified, phone_verified, updated_permissions in cases:
+            with self.subTest(current_role=current_role):
+                connection_context = MagicMock()
+                db = connection_context.__enter__.return_value
+                db.execute.return_value.fetchone.return_value = {
+                    "id": 10,
+                    "username": "role_user",
+                    "email": "role@example.com",
+                    "phone": "+573001234567",
+                    "email_verified": email_verified,
+                    "phone_verified": phone_verified,
+                    "role": expected_role,
+                    "permissions": updated_permissions,
+                    "active": True,
+                }
+                user = {
+                    "id": 10,
+                    "role": current_role,
+                    "permissions": permissions,
+                    "email_verified": email_verified,
+                    "phone_verified": phone_verified,
+                }
+                with patch.object(auth_routes, "connection", return_value=connection_context):
+                    result = auth_routes.toggle_visitor_artist_role(user)
+
+                self.assertEqual(result["user"]["role"], expected_role)
+                query_values = db.execute.call_args.args[1]
+                self.assertEqual(query_values[0], expected_role)
+                self.assertEqual(query_values[1].obj, updated_permissions)
+
+    def test_role_toggle_requires_verified_visitor_and_rejects_other_roles(self):
+        for user in (
+            {
+                "id": 11,
+                "role": "VISITANTE",
+                "permissions": ["works:read"],
+                "email_verified": False,
+                "phone_verified": True,
+            },
+            {
+                "id": 12,
+                "role": "WEBMASTER",
+                "permissions": ["works:read"],
+                "email_verified": True,
+                "phone_verified": True,
+            },
+        ):
+            with self.subTest(role=user["role"]), self.assertRaises(HTTPException) as raised:
+                auth_routes.toggle_visitor_artist_role(user)
+            self.assertEqual(raised.exception.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()
