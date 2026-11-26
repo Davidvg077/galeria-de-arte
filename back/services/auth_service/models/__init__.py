@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+import re
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -9,11 +11,20 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    username: str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_.-]+$")
+    username: str = Field(min_length=3, max_length=50)
     email: str = Field(min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     phone: str = Field(pattern=r"^\+[1-9]\d{7,14}$")
     password: str = Field(min_length=12, max_length=128)
     confirm_password: str = Field(min_length=12, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def username_is_not_email(cls, value: str) -> str:
+        if "@" in value:
+            raise ValueError("Usa el campo «Correo electrónico» para tu correo. El usuario solo admite letras, números, punto, guion y guion bajo.")
+        if re.fullmatch(r"[a-zA-Z0-9_.-]+", value) is None:
+            raise ValueError("El usuario solo admite letras, números, punto, guion y guion bajo.")
+        return value
 
     @model_validator(mode="after")
     def passwords_match(self):

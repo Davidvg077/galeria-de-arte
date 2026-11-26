@@ -143,6 +143,19 @@ class RequestModelsTests(unittest.TestCase):
                 confirm_password="different-password",
             )
 
+    def test_registration_username_rejects_email_address_in_spanish(self):
+        with self.assertRaisesRegex(
+            Exception,
+            "Correo electrónico",
+        ):
+            RegisterRequest(
+                username="usuario@example.com",
+                email="usuario@example.com",
+                phone="+573001234567",
+                password="long-unique-password",
+                confirm_password="long-unique-password",
+            )
+
     def test_registration_ignores_client_supplied_roles(self):
         for role in ("ARTISTA", "ADMIN"):
             with self.subTest(role=role):
@@ -232,6 +245,45 @@ class DemoFlowTests(unittest.TestCase):
         self.assertEqual(result["user"]["role"], "ARTISTA")
         self.assertIn("works:submit", result["user"]["permissions"])
         self.assertIn("SET role = 'ARTISTA'", db.execute.call_args.args[0])
+
+    def test_role_toggle_changes_both_directions_without_changing_session(self):
+        cases = (
+            (
+                "VISITANTE",
+                "ARTISTA",
+                ["works:read", "works:submit"],
+                {"email_verified": True, "phone_verified": True},
+            ),
+            (
+                "ARTISTA",
+                "VISITANTE",
+                ["works:read"],
+                {"email_verified": True, "phone_verified": True},
+            ),
+        )
+        for current_role, expected_role, expected_permissions, verification in cases:
+            connection_context = MagicMock()
+            db = connection_context.__enter__.return_value
+            db.execute.return_value.fetchone.return_value = {
+                "id": 10,
+                "username": "role_user",
+                "email": "role@example.com",
+                "phone": "+573001234567",
+                "email_verified": True,
+                "phone_verified": True,
+                "role": expected_role,
+                "permissions": expected_permissions,
+                "active": True,
+            }
+            user = {
+                "id": 10,
+                "role": current_role,
+                "permissions": ["works:read", "works:submit"] if current_role == "ARTISTA" else ["works:read"],
+                **verification,
+            }
+            with patch.object(auth_routes, "connection", return_value=connection_context):
+                result = auth_routes.toggle_visitor_artist_role(user)
+            self.assertEqual(result["user"]["role"], expected_role)
 
 
 if __name__ == "__main__":

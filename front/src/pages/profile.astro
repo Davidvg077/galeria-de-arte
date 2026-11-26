@@ -80,7 +80,6 @@ import MainLayout from '../layouts/MainLayout.astro';
       ['Usuario', user.username],
       ['Correo', user.email || 'No registrado'],
       ['Teléfono', user.phone || 'No registrado'],
-      ['Rol', user.role],
       ['Correo verificado', user.email_verified ? 'Sí' : 'No'],
       ['Teléfono verificado', user.phone_verified ? 'Sí' : 'No'],
     ];
@@ -94,6 +93,20 @@ import MainLayout from '../layouts/MainLayout.astro';
       description.textContent = value;
       row.append(term, description);
       details.append(row);
+      if (label === 'Usuario') {
+        const roleLine = document.createElement('div');
+        roleLine.className = 'profile-role';
+        const roleLabel = document.createElement('p');
+        roleLabel.innerHTML = `Rol actual: <strong>${user.role === 'ARTISTA' ? 'Artista' : user.role === 'VISITANTE' ? 'Visitante' : user.role}</strong>`;
+        const roleButton = document.createElement('button');
+        roleButton.type = 'button';
+        roleButton.className = 'button role-toggle';
+        roleButton.textContent = user.role === 'ARTISTA' ? 'Cambiar a visitante' : user.role === 'VISITANTE' ? 'Cambiar a artista' : '';
+        roleButton.hidden = !roleButton.textContent;
+        roleButton.addEventListener('click', () => toggleRole(roleButton));
+        roleLine.append(roleLabel, roleButton);
+        details.append(roleLine);
+      }
     }
     profileContent.replaceChildren(details);
     verificationSection.classList.remove('hidden');
@@ -102,7 +115,7 @@ import MainLayout from '../layouts/MainLayout.astro';
     document.querySelector('#phone-form').hidden = Boolean(user.phone);
     document.querySelector('#phone-request').hidden = !user.phone || user.phone_verified;
     document.querySelector('#phone-confirm').hidden = !user.phone || user.phone_verified;
-    document.querySelector('#artist-request').hidden = user.role !== 'VISITANTE' || !user.email_verified || !user.phone_verified;
+    document.querySelector('#artist-request').hidden = true;
   };
   const showDemoCode = (kind, result) => {
     const panel = document.querySelector(`#${kind}-demo-code`);
@@ -160,6 +173,20 @@ import MainLayout from '../layouts/MainLayout.astro';
     }
   });
 
+  const toggleRole = async (button) => {
+    button.disabled = true;
+    try {
+      const result = await api('role/toggle');
+      renderUser(result.user);
+      setStatus(result.user.role === 'ARTISTA'
+        ? 'Rol cambiado a artista. La sesión permanece abierta.'
+        : 'Rol cambiado a visitante. La sesión permanece abierta.');
+    } catch (error) {
+      setStatus(error.message, true);
+      button.disabled = false;
+    }
+  };
+
   getCurrentUser()
     .then((user) => {
       if (!user) {
@@ -197,5 +224,8 @@ import MainLayout from '../layouts/MainLayout.astro';
   .verification-status.error { color: #a0473f; }
   .artist-request { margin-top: 12px; }
   .artist-request[hidden] { display: none; }
-  @media (max-width: 600px) { .profile-data div { grid-template-columns: 1fr; gap: 5px; } .verification-grid { grid-template-columns: 1fr; } }
+  .profile-role { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #efeee9; }
+  .profile-role p { margin: 0; font-size: 13px; }
+  .profile-role .role-toggle { margin: 0; }
+  @media (max-width: 600px) { .profile-data div { grid-template-columns: 1fr; gap: 5px; } .verification-grid { grid-template-columns: 1fr; } .profile-role { align-items: stretch; flex-direction: column; } }
 </style>

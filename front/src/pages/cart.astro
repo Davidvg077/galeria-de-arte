@@ -9,7 +9,7 @@ import MainLayout from '../layouts/MainLayout.astro';
     <div id="cart-items" class="cart-items" aria-live="polite"></div>
     <div id="cart-summary" class="cart-summary hidden">
       <p>Los precios se vuelven a validar al preparar el pedido.</p>
-      <button id="checkout-button" class="button" type="button">Continuar con la compra</button>
+      <button id="checkout-button" class="button" type="button">Finalizar compra</button>
     </div>
     <form id="confirmation-form" class="card confirmation-form hidden">
       <h2>Confirma tu identidad</h2>
@@ -55,6 +55,20 @@ import MainLayout from '../layouts/MainLayout.astro';
   const demoCodePanel = document.querySelector('#demo-code-panel');
   let checkoutId = null;
   let checkoutItems = [];
+  const checkoutKeyPrefix = 'gart.checkout-key.';
+  const checkoutKeyStorage = (items) => checkoutKeyPrefix + items
+    .map((item) => `${item.work_id}:${item.quantity || 1}`)
+    .sort()
+    .join('|');
+  const getCheckoutKey = (items) => {
+    const storageKey = checkoutKeyStorage(items);
+    let key = sessionStorage.getItem(storageKey);
+    if (!key) {
+      key = crypto.randomUUID();
+      sessionStorage.setItem(storageKey, key);
+    }
+    return key;
+  };
 
   const showStatus = (message, error = false) => {
     status.textContent = message;
@@ -175,7 +189,7 @@ import MainLayout from '../layouts/MainLayout.astro';
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': getCheckoutKey(checkoutItems),
         },
         body: JSON.stringify({ items: checkoutItems }),
       });
@@ -202,6 +216,7 @@ import MainLayout from '../layouts/MainLayout.astro';
         body: JSON.stringify({ code: new FormData(confirmationForm).get('code') }),
       });
       saveCart([]);
+      sessionStorage.removeItem(checkoutKeyStorage(checkoutItems));
       confirmationForm.classList.add('hidden');
       showStatus(`Pedido #${order.id} confirmado y pendiente de pago. No se realizó ningún cobro.`);
       await renderCart();
